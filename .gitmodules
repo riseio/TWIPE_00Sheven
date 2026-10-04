@@ -1,0 +1,12 @@
+[submodule "lib/N64ModernRuntime"]
+	path = lib/N64ModernRuntime
+	url = https://github.com/riseio/TWIPE.git
+	branch = dependencies/offline-native-module
+[submodule "lib/RecompFrontend"]
+	path = lib/RecompFrontend
+	url = https://github.com/riseio/TWIPE.git
+	branch = dependencies/offline-native-setup
+[submodule "lib/rt64"]
+	path = lib/rt64
+	url = https://github.com/riseio/TWIPE.git
+	branch = dependencies/rt64-banjo-camera-rendering

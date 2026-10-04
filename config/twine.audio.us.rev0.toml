@@ -1,0 +1,6 @@
+text_offset = 0xAE170
+text_size = 0xF30
+text_address = 0x04001080
+rom_file_path = "../OriginalGame/007 - The World is Not Enough (U) [!].z64"
+output_file_path = "../build/generated/rsp/twine_audio.cpp"
+output_function_name = "twine_audio"
