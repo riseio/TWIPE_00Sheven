@@ -1,4 +1,4 @@
-# I WOULD HAVE GIVEN YOU THE WORLD
+# I COULD HAVE GIVEN YOU THE WORLD
 
 A native PC and Steam Deck port of **007: The World Is Not Enough**, with widescreen support,
 modern controls, and a range of QOL enhancements. This is a hobby project originally built
@@ -115,7 +115,7 @@ replace the executable. Keep that folder when updating or moving the game.
 
 ## Disclaimer
 
-I Would Have Given You The World is an unofficial fan project. It is not affiliated with, endorsed by,
+I Could Have Given You The World is an unofficial fan project. It is not affiliated with, endorsed by,
 or sponsored by the original game's developers, publishers, or rights holders.
 
 **We do not provide the original game.** This repository and its downloads do not
