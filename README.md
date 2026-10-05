@@ -4,7 +4,7 @@ A native PC and Steam Deck port of **007: The World Is Not Enough**, with widesc
 modern controls, and a range of QOL enhancements. This is a hobby project originally built
 for my own playthrough, now shared because sharing is caring.
 
-https://www.youtube.com/watch?v=Bh7wvModqQY
+[https://www.youtube.com/watch?v=Bh7wvModqQY](https://youtu.be/Bh7wvModqQY)
 
 ## Download and play
 
@@ -12,24 +12,19 @@ Builds are available from [Releases](https://github.com/riseio/TWIPE_00Sheven/re
 You need your own **The World Is Not Enough (USA), revision 0** ROM. Place it beside the
 executable or select it when prompted on first launch. No ROM or game assets are included.
 
-- **Windows:** Run the portable EXE. No installer or separate DLLs needed.
-- **Steam Deck:** Make the AppImage executable, add it to Steam as a non-Steam game,
-  and use the Gamepad controller layout.
-- **Linux:** The AppImage is the simplest option.
-
-The first launch compiles the game locally from your ROM. Later launches reuse the
-completed native code. No development tools or internet connection are needed to play.
+**The first launch compiles the game locally from your ROM. Later launches reuse the
+completed native code. No development tools or internet connection are needed to play.**
 
 Saves, settings, and generated content stay in the adjacent `data` folder when you
 replace the executable. Keep that folder when updating or moving the game.
 
 ## Enhancements
 
-- Widescreen and ultrawide support, with full-screen pause and radial backgrounds.
+- Widescreen and ultrawide support.
 - Interpolated rendering for high refresh rate displays.
-- Mouse aiming and modern twin-stick controls, with remappable primary and secondary bindings.
-- Larger magazines: Meyer TMP **25 → 60**, Deutsche M45 **25 → 40**,
-  Deutsche M9S **30 → 50** in both modes, and Ingalls Type 20 **30 → 45**.
+- Mouse aiming and modern twin-stick controls.
+- Larger magazines: E.g., Meyer TMP **25 → 60**, Deutsche M45 **25 → 40**,
+  Deutsche M9S **30 → 50**, Ingalls Type 20 **30 → 45** etc..
 - Doubled ammunition pickups and reserve limits for the shared pistol/SMG ammo pools:
   P2K, Meyer TMP and Deutsche M9S pickups **20 → 40**, reserves **80 → 160**;
   Deutsche M45 and Ingalls Type 20 pickups **25 → 50**, reserves **100 → 200**.
@@ -37,17 +32,15 @@ replace the executable. Keep that folder when updating or moving the game.
 - **1.5× faster reloads** for the Delta 900 Mag and Mustang .44.
 - **Double damage** for the Seamaster Speargun and Watch Laser. The laser uses
   **one quarter of its original ammunition**, and spears retain straight flight beyond their old drop range.
-- Removed firing spread from the Raptor Magnum's laser mode and halved the
-  Frinesi Special 12's projectile drop beyond its original range.
+- Removed firing spread from the Raptor Magnum's laser mode and halved the Frinesi Special 12's projectile drop beyond its original range.
 - More responsive jumping and improved ladder jump-off and climb-off handling.
 - Improved scope zoom using keyboard, mouse wheel/buttons, D-pad or left stick while aiming.
-  Zoom inputs take priority over overlapping movement and gadget shortcuts.
 - Quick watch-gadget and vision-mode selection, with Night Vision and X-ray available in the gadget wheel.
-- Clearer vision overlays, a Night Vision battery display and an unlimited-use indicator for X-ray.
+- Clearer vision overlays.
 - Crosshair colours for visible enemies and friendly NPCs, plus grapple-target feedback.
 - Live objectives while playing, persistent quick saves/loads and automatic campaign-progress saving.
 - Sharper game fonts and controller/keyboard prompts that follow your bindings.
-- Audio output-device selection, an output test and recovery when devices reconnect.
+- Audio output-device selection and recovery when devices reconnect.
 - Steam Deck rear-button shortcuts and suspend/resume recovery.
 - Portable saves and settings, plus a campaign-reset option that preserves your controls and display settings.
 
@@ -55,29 +48,23 @@ replace the executable. Keep that folder when updating or moving the game.
 
 Open **Settings → QOL** to choose:
 
-- **Grapple:** Classic or the Nightfire-style **Modern Pull**, which pulls you toward
-  valid surfaces while retaining scripted grapple interactions. Modern Pull is the default.
-- **Weapon Selection / Gadget Selection:** choose Classic cycling or Radial independently.
-  With Radial enabled, tap to cycle and hold to select from the wheel. Both default to Classic.
+- **Grapple:** Classic or the Nightfire-style.
+- **Weapon Selection / Gadget Selection:** choose Classic cycling or Radial Menus.
+  With Radial enabled, tap to cycle and hold to select from the wheel.
 - **Remember Weapon Modes:** retain suppressors, firing modes and manual scope choices
   across weapon/gadget swaps until you change them. On by default.
-- **Hold to Sprint:** run at **1.75× walking speed** with Shift or held Interact while
-  moving forward. Interactions and reload take priority. On by default.
-- **Civilian Health:** Original or **2× starting health** for civilians.
-- **Invincible Friendly NPCs:** protect allies and civilians from damage and
-  player-hit mission failures. Off by default; scripted story events still apply.
+- **Hold to Sprint:** run with Shift or held Interact while moving forward.
+- **Civilian Health:** **2× starting health** for civilians.
+- **Invincible Friendly NPCs:** protect allies and civilians from damage and player-hit mission failures.
 - **Double Watch Darts:** double dart grants, pickups and capacity on the next mission or restart.
-  Original ammunition is the default.
-- **Regenerating Health:** recover **10% of maximum health per second** after
-  **five seconds without damage**. Armour does not regenerate. Off by default.
+- **Regenerating Health:** Like Halo style if you want it.
 
 Other optional settings:
 
-- **Graphics:** enhanced textures generated locally from your ROM, resolution and frame-rate controls,
-  and Original, 16:9 or expanded HUD placement.
+- **Graphics:** enhanced textures generated locally.
 - **General:** auto aim, mouse acceleration, mouse/right-stick sensitivity and rumble strength.
 - **Cheats:** invulnerability, infinite oxygen, no fall damage, all weapons, all gadgets,
-  and all missions/difficulties. These are separate single-player options and default to Off.
+  and all missions/difficulties.
 
 ## PC controls
 
@@ -102,9 +89,6 @@ Other optional settings:
 | Enter | Pause |
 | Escape | Settings |
 
-Controls can be changed in the settings menu. Generate the optional texture pack
-in Graphics before enabling enhanced textures.
-Hold-to-select weapon and gadget wheels require their corresponding Radial QOL setting.
 
 ## Steam Deck controls
 
