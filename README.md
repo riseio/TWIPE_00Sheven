@@ -46,8 +46,6 @@ replace the executable. Keep that folder when updating or moving the game.
 
 ## QOL Toggles
 
-Open **Settings → QOL** to choose:
-
 - **Grapple:** Classic or the Nightfire-style.
 - **Weapon Selection / Gadget Selection:** choose Classic cycling or Radial Menus.
   With Radial enabled, tap to cycle and hold to select from the wheel.
@@ -59,7 +57,7 @@ Open **Settings → QOL** to choose:
 - **Double Watch Darts:** double dart grants, pickups and capacity on the next mission or restart.
 - **Regenerating Health:** Like Halo style if you want it.
 
-Other optional settings:
+## Other optional settings:
 
 - **Graphics:** enhanced textures generated locally.
 - **General:** auto aim, mouse acceleration, mouse/right-stick sensitivity and rumble strength.
