@@ -4,6 +4,8 @@ A native PC and Steam Deck port of **007: The World Is Not Enough**, with widesc
 modern controls, and a range of QOL enhancements. This is a hobby project originally built
 for my own playthrough, now shared because sharing is caring.
 
+https://www.youtube.com/watch?v=Bh7wvModqQY
+
 ## Download and play
 
 Builds are available from [Releases](https://github.com/riseio/TWIPE_00Sheven/releases).
