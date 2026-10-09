@@ -130,6 +130,9 @@ continues to control zoom while aiming with a scoped weapon.
 
 ## And Beyond
 - Online P2P multiplayer
+- Path-traced lighting
+- Additional armor and weapon placements on some missions
+- Randomizer
 
 ## Disclaimer
 
