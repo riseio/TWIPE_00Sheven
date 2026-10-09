@@ -119,6 +119,18 @@ continues to control zoom while aiming with a scoped weapon.
 | L5 / R5 | Quick save / quick load |
 | A / B in menus | Confirm / back |
 
+## What is being worked on for the next patch
+- Auto-aim restoration
+- Stop mission briefing overlay turning off after mid mission cutscenes
+- Restore scrolling at briefing screens
+- Masquerade Bomb timer increase QOL toggle
+- Steamdeck Rumble support
+- Steamdeck Gyro-aim support
+- Android and Mac builds
+
+## And Beyond
+- Online P2P multiplayer
+
 ## Disclaimer
 
 I Could Have Given You The World is an unofficial fan project. It is not affiliated with, endorsed by,
