@@ -24,9 +24,8 @@ replace the executable. Keep that folder when updating or moving the game.
 - Adjustable vertical FOV from 40 to 100 degrees, with a reset to the original 60-degree view.
 - Independent horizontal and vertical inversion for mouse and right-stick aiming.
 - Mouse-wheel weapon cycling when not using scope zoom.
-- W/S acceleration and braking while skiing in Cold Reception.
 - Interpolated rendering for high refresh rate displays.
-- Mouse aiming and modern twin-stick controls.
+- Mouse aiming or modern twin-stick controls.
 - Larger magazines: E.g., Meyer TMP **25 → 60**, Deutsche M45 **25 → 40**,
   Deutsche M9S **30 → 50**, Ingalls Type 20 **30 → 45** etc..
 - Doubled ammunition pickups and reserve limits for the shared pistol/SMG ammo pools:
@@ -60,7 +59,7 @@ replace the executable. Keep that folder when updating or moving the game.
 - **Invincible Friendly NPCs:** protect allies and civilians from damage and player-hit mission failures.
 - **Double Watch Darts:** double dart grants, pickups and capacity on the next mission or restart.
 - **Regenerating Health:** Like Halo style if you want it.
-- **Impact Effects:** enhanced hit effects, enabled by default. Original effects remain available.
+- **Impact Effects:** enhanced hit effects like lil blood puffs, enabled by default.
 
 ## Other optional settings:
 
