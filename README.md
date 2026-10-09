@@ -9,8 +9,7 @@ for my own playthrough, now shared because sharing is caring.
 ## Download and play
 
 Builds are available from [Releases](https://github.com/riseio/TWIPE_00Sheven/releases).
-You need your own **The World Is Not Enough (USA), revision 0** ROM. Place it beside the
-executable or select it when prompted on first launch. No ROM or game assets are included.
+This project does not contain any game assets or code derived from the **The World Is Not Enough (USA), revision 0** ROM. 
 
 **The first launch compiles the game locally from your ROM. Later launches reuse the
 completed native code. No development tools or internet connection are needed to play.**
