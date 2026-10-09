@@ -1,4 +1,4 @@
-// MMPX, copyright 2020 Morgan McGuire and Mara Gagiu; MIT terms in NOTICES.
+// MMPX by Morgan McGuire and Mara Gagiu, copyright 2020, MIT licensed.
 
 #pragma once
 #include <array>

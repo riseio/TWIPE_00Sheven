@@ -7,6 +7,7 @@
 #include "ultramodern/renderer_context.hpp"
 #include "ultramodern/ultramodern.hpp"
 #include <atomic>
+#include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <optional>
@@ -172,7 +173,7 @@ void complete(Action action, const char* error) noexcept {
         uint64_t(error == nullptr), std::memory_order_release);
     try {
         if (error) {
-
+            std::fprintf(stderr, "TWINE_STATE failed=%s reason=%s\n", action == Action::Save ? "save" : "restore", error);
             notify(action == Action::Save ? "State not saved" : "State not restored", error);
         } else if (!transaction_warning.empty()) {
             notify("State saved with a warning", transaction_warning);
@@ -181,7 +182,7 @@ void complete(Action action, const char* error) noexcept {
                 active_slot == Slot::Manual ? "Manual state — persistent across game restarts." : "Checkpoint state.");
         }
     } catch (...) {
-
+        std::fprintf(stderr, "TWINE_STATE notification_failed=1 operation_completed=%u\n", unsigned(error == nullptr));
     }
     busy.store(false, std::memory_order_release);
 }

@@ -39,6 +39,7 @@ set(aot_inputs
     "${CMAKE_SOURCE_DIR}/config/twine.us.rev0.syms.toml"
     "${CMAKE_SOURCE_DIR}/config/twine.audio.us.rev0.toml"
     "${TWINE_GENERATED_CPU_DIR}/funcs.h"
+    ${TWINE_GENERATED_CPU_SOURCES}
     "${aot_generators}/N64Recomp${aot_suffix}"
     "${aot_generators}/RSPRecomp${aot_suffix}")
 file(GLOB aot_headers CONFIGURE_DEPENDS

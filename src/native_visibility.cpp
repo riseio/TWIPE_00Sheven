@@ -1,4 +1,5 @@
 #include "native_visibility.hpp"
+#include "visibility_stack.hpp"
 #include "twine_recomp.h"
 #include <bit>
 #include <cstdio>
@@ -9,6 +10,7 @@ namespace ultramodern { float get_aspect_ratio_scale(); }
 namespace {
 constexpr uint32_t base = 0x80000000U;
 void require_range(uint32_t address, uint32_t size) {
+    if (twine::render::visibility_stack_contains(address, size)) return;
     if (address < base || address >= base + 0x800000U || size > base + 0x800000U-address) {
         throw std::runtime_error("Native visibility metadata is outside RDRAM");
     }
@@ -129,6 +131,7 @@ void twine::render::begin_visibility(uint8_t* rdram, uint64_t frame, uint32_t ca
 }
 
 void twine::render::reset_visibility() {
+    reset_visibility_stack();
     cameras = {}; active = nullptr; spheres.reset(); doors.reset();
 }
 void twine::render::retire_visibility(uint32_t address, uint32_t size) {

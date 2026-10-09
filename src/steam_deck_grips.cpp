@@ -2,6 +2,7 @@
 
 #ifdef __linux__
 #include <cerrno>
+#include <cstdio>
 #include <fcntl.h>
 #include <linux/hidraw.h>
 #include <linux/input.h>
@@ -27,7 +28,7 @@ std::array<int, twine::deck_grips::raw_reader_capacity> raw_fds = [] {
     result.fill(-1);
     return result;
 }();
-
+std::array<std::string, twine::deck_grips::raw_reader_capacity> raw_paths{};
 struct RawHeldState {
     bool a = false;
     bool b = false;
@@ -41,8 +42,8 @@ std::atomic_bool faces_available{false};
 auto next_scan = std::chrono::steady_clock::time_point{};
 auto next_controller_scan = std::chrono::steady_clock::time_point{};
 int32_t deck_controller_instance = -1;
-
-bool raw_input_seen = false;
+bool unavailable_reported = false;
+bool raw_reported = false;
 
 void close_input(int& fd) {
     if (fd >= 0) {
@@ -62,11 +63,11 @@ bool has_raw_reader() {
 
 void close_raw(size_t index) {
     close_input(raw_fds[index]);
-
+    raw_paths[index].clear();
     raw_held_states[index] = {};
     if (!has_raw_reader()) {
         faces_available.store(false, std::memory_order_release);
-        raw_input_seen = false;
+        raw_reported = false;
     }
 }
 
@@ -76,7 +77,7 @@ void open_deck() {
         return;
     }
     next_scan = now + std::chrono::seconds(2);
-
+    int last_error = 0;
     if (event_fd < 0) {
         constexpr size_t bits_per_word = sizeof(unsigned long) * 8;
         std::array<unsigned long,
@@ -85,7 +86,9 @@ void open_deck() {
             const std::string path = "/dev/input/event" + std::to_string(index);
             const int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
             if (fd < 0) {
-
+                if (errno != ENOENT) {
+                    last_error = errno;
+                }
                 continue;
             }
             input_id id{};
@@ -110,6 +113,7 @@ void open_deck() {
                     (key_bits[twine::deck_grips::btn_gripr2 / bits_per_word] &
                     (1UL << (twine::deck_grips::btn_gripr2 % bits_per_word)));
                 faces_available.store(true, std::memory_order_release);
+                unavailable_reported = false;
 
                 break;
             }
@@ -122,16 +126,18 @@ void open_deck() {
             const std::string path = "/dev/hidraw" + std::to_string(index);
             const int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
             if (fd < 0) {
-
+                if (errno != ENOENT) {
+                    last_error = errno;
+                }
                 continue;
             }
             struct hidraw_devinfo info{};
             if (ioctl(fd, HIDIOCGRAWINFO, &info) == 0 &&
                     info.vendor == valve_vendor && info.product == steam_deck_product) {
                 raw_fds[raw_count] = fd;
-
+                raw_paths[raw_count] = path;
                 ++raw_count;
-
+                unavailable_reported = false;
                 if (raw_count == raw_fds.size()) {
                     break;
                 }
@@ -141,7 +147,13 @@ void open_deck() {
         }
 
     }
-
+    if (event_fd < 0 && !has_raw_reader() && !unavailable_reported) {
+        std::fprintf(
+            stderr,
+            "TWINE_CONTROLLER deck_grips=unavailable error=%d\n",
+            last_error);
+        unavailable_reported = true;
+    }
 }
 
 }
@@ -168,7 +180,7 @@ twine::deck_grips::Edges twine::deck_grips::poll() {
                 continue;
             }
             if (size < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-
+                std::fprintf(stderr, "TWINE_CONTROLLER deck_grips=evdev_disconnected error=%d\n", errno);
                 close_input(event_fd);
                 lower_evdev = event_l5 = event_r5 = false;
             }
@@ -185,8 +197,8 @@ twine::deck_grips::Edges twine::deck_grips::poll() {
                 raw_fds[index], report.data(), report.size());
             if (size > 0) {
                 if (is_deck_report(report.data(), static_cast<size_t>(size)) &&
-                        !raw_input_seen) {
-                    raw_input_seen = true;
+                        !raw_reported) {
+                    raw_reported = true;
                     faces_available.store(true, std::memory_order_release);
 
                 }
@@ -211,7 +223,11 @@ twine::deck_grips::Edges twine::deck_grips::poll() {
                 continue;
             }
             if (size < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-
+                std::fprintf(
+                    stderr,
+                    "TWINE_CONTROLLER deck_grips=disconnected path=%s error=%d\n",
+                    raw_paths[index].c_str(),
+                    errno);
                 close_raw(index);
             }
             break;
@@ -221,7 +237,7 @@ twine::deck_grips::Edges twine::deck_grips::poll() {
         result.lower_available = true; result.l5_held |= event_l5; result.r5_held |= event_r5;
     }
     for (size_t i = 0; i < raw_fds.size(); ++i) {
-        if (raw_fds[i] >= 0 && raw_input_seen) {
+        if (raw_fds[i] >= 0 && raw_reported) {
             result.lower_available = true;
             result.l5_held |= raw_held_states[i].l5; result.r5_held |= raw_held_states[i].r5;
         }
@@ -294,8 +310,8 @@ void twine::deck_grips::recover_after_resume() {
     deck_controller_instance = -1;
     next_scan = {};
     next_controller_scan = {};
-
-    raw_input_seen = false;
+    unavailable_reported = false;
+    raw_reported = false;
 
 #endif
 }

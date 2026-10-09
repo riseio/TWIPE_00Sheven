@@ -314,6 +314,11 @@ inline bool action_axis(
     return true;
 }
 
+inline bool speed_action(uint32_t action, float forward) {
+
+    return (action == 27 && forward > 0.5f) || (action == 28 && forward < -0.5f);
+}
+
 inline uint16_t remap_buttons(uint16_t buttons) {
     const bool aim = (buttons & button_l) != 0;
     const bool stand_or_jump = (buttons & c_up) != 0;

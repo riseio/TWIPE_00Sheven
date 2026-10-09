@@ -134,7 +134,7 @@ void prepare(bool explicit_request) {
     } catch (const PreparationCancelled &) {
         recompui::close_prompt();
     } catch (const std::exception &error) {
-
+        std::fprintf(stderr, "TWINE_TEXTURE_PREPARATION failed=%s\n", error.what());
         usable.store(false);
         publish_installed(has_pack_cache(folder));
         recompui::queue_ui_action([message = std::string(error.what())] {
@@ -288,7 +288,7 @@ void load_selected() {
         } catch (const PreparationCancelled&) {
             return;
         } catch (const std::exception& error) {
-
+            std::fprintf(stderr, "TWINE_ARTWORK mounted=0 error=%s\n", error.what());
             recompui::open_info_prompt("Custom artwork unavailable",
                 "Check artwork.rtz in the game data folder. " + std::string(error.what()), "OK", [] {});
         }

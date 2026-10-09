@@ -28,7 +28,12 @@ static __forceinline gpr twine_sub32(gpr a, gpr b) {
 #endif
 
 static inline gpr twine_n64_address(uint32_t address) {
+#ifdef _MSC_VER
+
+    return twine_add32(address, 0);
+#else
     return (gpr)(int64_t)(int32_t)address;
+#endif
 }
 
 #define TWINE_MEM_W(offset, address) \
@@ -64,6 +69,14 @@ void twine_register_overlay(uint8_t* rdram, recomp_context* ctx);
 void twine_init_render_tags(uint8_t* rdram, recomp_context* ctx);
 void twine_begin_render_tags(uint8_t* rdram, recomp_context* ctx);
 void twine_finish_render_tags(uint8_t* rdram, recomp_context* ctx);
+void twine_begin_display_list_read(uint8_t* rdram, recomp_context* ctx);
+void twine_begin_impact_tick(void);
+void twine_character_impact(uint8_t* rdram, recomp_context* ctx);
+void twine_world_impact(uint8_t* rdram, recomp_context* ctx);
+void twine_finish_display_list_read(uint8_t* rdram, recomp_context* ctx);
+void twine_begin_visibility_stack(uint8_t* rdram, recomp_context* ctx);
+void twine_check_visibility_stack(uint8_t* rdram, recomp_context* ctx);
+void twine_end_visibility_stack(uint8_t* rdram, recomp_context* ctx);
 void twine_tag_model(uint8_t* rdram, uint32_t command, uint32_t owner,
     uint32_t resource, uint32_t part, uint32_t domain);
 void twine_tag_projection(uint8_t* rdram, uint32_t command, uint32_t role);
@@ -90,6 +103,9 @@ void twine_tag_scoped_model(uint8_t* rdram, uint32_t resource);
 void twine_cut_render_tags(void);
 void twine_retire_render_tags(uint8_t* rdram, recomp_context* ctx);
 void twine_match_portal_aspect(uint8_t* rdram, recomp_context* ctx);
+void twine_begin_camera_fov(uint8_t* rdram, uint32_t camera);
+void twine_finish_camera_fov(uint8_t* rdram);
+uint32_t twine_camera_fov(uint8_t* rdram, uint32_t camera, uint32_t authored);
 void twine_apply_gameplay_input_layout(uint8_t* rdram, recomp_context* ctx);
 void twine_begin_ui_aspect(uint8_t* rdram, recomp_context* ctx);
 uint32_t twine_ui_widescreen_alignment_enabled(void);
@@ -110,6 +126,7 @@ void twine_capture_render_task(uint8_t* rdram, recomp_context* ctx);
 void twine_initialize_simulation_period(uint8_t* rdram, recomp_context* ctx);
 void twine_sample_simulation_time(uint8_t* rdram, recomp_context* ctx);
 void twine_commit_simulation_time(uint8_t* rdram, recomp_context* ctx);
+void twine_profile_world_context(uint32_t active);
 void twine_prepare_input_prompts(uint8_t* rdram, recomp_context* ctx);
 void twine_restore_input_prompts(uint8_t* rdram, recomp_context* ctx);
 void twine_prepare_localized_input_prompt(
@@ -160,6 +177,7 @@ void twine_apply_civilian_health(uint8_t* rdram, recomp_context* ctx);
 uint32_t twine_npc_is_protected(uint8_t* rdram, uint32_t actor);
 uint32_t twine_npc_filter_damage(uint8_t* rdram, uint32_t actor);
 uint32_t twine_should_skip_fall_damage(uint8_t* rdram, recomp_context* ctx);
+uint32_t twine_override_modern_speed_action(uint8_t* rdram, recomp_context* ctx);
 void twine_filter_oxygen_depletion(uint8_t* rdram, recomp_context* ctx);
 void twine_invalidate_transient_state(uint8_t* rdram, recomp_context* ctx);
 uint32_t twine_profile_should_commit(uint8_t* rdram, recomp_context* ctx);

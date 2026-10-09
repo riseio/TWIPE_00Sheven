@@ -157,7 +157,7 @@ extern "C" void twine_prepare_font_textures(uint8_t* rdram, recomp_context* ctx)
         }
         menu_font.store(std::make_shared<const twine::fonts::Atlas>(atlases[2]),
             std::memory_order_release);
-        twine::fonts::prepare_cache(directory, atlases);
+        const auto rebuilt = twine::fonts::prepare_cache(directory, atlases);
         recompui::renderer::set_base_texture_pack(directory);
         loaded = true;
 
@@ -165,6 +165,6 @@ extern "C" void twine_prepare_font_textures(uint8_t* rdram, recomp_context* ctx)
     catch (const std::exception& error) {
 
         loaded = true;
-
+        std::fprintf(stderr, "TWINE_FONTS enhancement_failed=%s; retaining original fonts\n", error.what());
     }
 }

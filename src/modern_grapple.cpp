@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cinttypes>
 #include <cstdlib>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -19,6 +20,11 @@
 #include "native_aim.hpp"
 #include "twine_recomp.h"
 #include "shared/rt64_modern_grapple.h"
+
+extern "C" void twine_report_grapple_aim(uint8_t* rdram, recomp_context* ctx,
+    uint32_t player, bool valid,
+    const twine::grapple::Vec3& origin, const twine::grapple::Vec3& point,
+    const twine::grapple::Vec3& normal);
 
 namespace {
 
@@ -423,7 +429,8 @@ extern "C" void twine_grapple_apply_pull(
     }
     if (state.phase == Phase::Idle) {
         if (player_index == 0) {
-
+            twine_report_grapple_aim(rdram, ctx, player_object, idle_anchor_valid, idle_origin,
+                idle_candidate.point, idle_candidate.normal);
             if (modern_enabled() &&
                     equipped_item == twine::grapple::item_id) {
                 aim_anchor_available.store(
@@ -764,8 +771,7 @@ std::unique_ptr<twine::state::PreparedOwner> twine::state::prepare_grapple(std::
     Reader in(bytes); if (in.u32() != 1) throw std::runtime_error("Invalid grapple state schema");
     State saved; grapple_state_fields(in, saved);
     const auto next = in.u64(); const auto player = in.scalar<int>(); const auto aim = in.scalar<bool>();
-    const auto protected_actor = in.u32(); const auto protection_epoch = in.u64();
-    in.u64(); // Reserved counter in existing saves.
+    const auto protected_actor = in.u32(); const auto protection_epoch = in.u64(); const auto updates = in.u64();
     std::array<uint8_t, 4> items; for (auto& item : items) item = in.scalar<uint8_t>();
     in.end();
     if (saved.phase > Phase::Released || saved.contact_count > saved.contact_keys.size() ||
@@ -777,7 +783,7 @@ std::unique_ptr<twine::state::PreparedOwner> twine::state::prepare_grapple(std::
         !std::isfinite(saved.initial_yaw) || !std::isfinite(saved.maximum_yaw_error) ||
         !std::isfinite(saved.collision.above) || !std::isfinite(saved.collision.below))
         throw std::runtime_error("Invalid grapple state");
-    return prepared_owner([saved, next, player, aim, protected_actor, protection_epoch, items]() mutable noexcept {
+    return prepared_owner([saved, next, player, aim, protected_actor, protection_epoch, updates, items]() mutable noexcept {
         const auto epoch = qol::lifecycle_epoch();
         const bool protected_now = saved.epoch == protection_epoch;
         saved.epoch = epoch; ::state = saved; next_attachment_id = next;

@@ -25,6 +25,7 @@ inline constexpr char sprint_key[] = "sprint";
 inline constexpr char double_darts_key[] = "double_darts";
 inline constexpr char health_regeneration_key[] = "health_regeneration";
 inline constexpr char remember_weapon_modes_key[] = "remember_weapon_modes";
+inline constexpr char impact_effects_key[] = "impact_effects";
 inline constexpr char fall_damage_key[] = "fall_damage";
 inline constexpr char legacy_bonuses_key[] = "single_player_bonuses";
 
@@ -36,11 +37,13 @@ enum class SprintMode : uint8_t { Off, On };
 enum class DartAmmoMode : uint8_t { Original, Double };
 enum class HealthRegenerationMode : uint8_t { Off, On };
 enum class WeaponModeMemory : uint8_t { Off, On };
+enum class ImpactEffects : uint8_t { Original, Enhanced };
 enum class FallDamageMode : uint8_t { Original, Off };
 enum class LegacyBonusesMode : uint8_t { OriginalBehaviour, Enabled };
 
 inline constexpr GrappleMode default_grapple_mode = GrappleMode::ModernPull;
 inline constexpr SprintMode default_sprint_mode = SprintMode::On;
+inline constexpr ImpactEffects default_impact_effects = ImpactEffects::Enhanced;
 
 constexpr bool should_migrate_grapple_default(bool migration_complete) {
     return !migration_complete;
@@ -56,6 +59,7 @@ struct Settings {
     DartAmmoMode darts = DartAmmoMode::Original;
     HealthRegenerationMode health_regeneration = HealthRegenerationMode::Off;
     WeaponModeMemory weapon_modes = WeaponModeMemory::On;
+    ImpactEffects impacts = default_impact_effects;
 };
 
 inline bool setting_key_equal(std::string_view left, std::string_view right) {

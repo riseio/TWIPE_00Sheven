@@ -1,6 +1,7 @@
 #include "cheats.hpp"
 
 #include <atomic>
+#include <cstdio>
 #include <variant>
 
 #include "librecomp/config.hpp"
@@ -157,7 +158,11 @@ bool initialize(uint8_t* rdram) {
     const uint32_t callback = static_cast<uint32_t>(
         TWINE_MEM_W(4, main_menu_entry));
     if (!is_installable_menu_row(type, callback)) {
-
+        std::fprintf(
+            stderr,
+            "TWINE_CHEATS menu_install=failed type=%u callback=0x%08X\n",
+            static_cast<unsigned>(type),
+            static_cast<unsigned>(callback));
         return false;
     }
 

@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -96,11 +97,6 @@ void stage_restore_roots(const Roots& saved) {
         throw std::logic_error("Root restore preflight requires a complete rendezvous");
     }
     for (size_t i = 0; i < roots.size(); ++i) validate_root(saved[i], roots[i]);
-    const auto game_stack = uint32_t(saved[size_t(Root::Game)].gpr[29]);
-    if ((game_stack & 7U) || game_stack < 0x80000440U ||
-        !get_function(int32_t(0x8000A22CU)) || !get_function(int32_t(0x8000A1D0U))) {
-        throw std::runtime_error("Restored game cannot apply native audio settings safely");
-    }
     staged_roots = saved;
     roots_staged = true;
 }
@@ -207,25 +203,13 @@ extern "C" void twine_state_root(uint8_t* rdram, recomp_context* ctx, uint32_t r
         TO_PTR(OSThread, self)->state = OSThreadState::STOPPED;
         ultramodern::run_next_thread_and_wait(rdram);
         if (restore_pending) {
-            bool apply_audio = false;
             if (root == uint32_t(Root::Game)) {
                 staged_enhancements->commit();
                 staged_modernization->commit();
-                apply_audio = twine::campaign::restore_state_options(rdram);
+                twine::campaign::restore_state_options(rdram);
             }
             restore_root(staged_roots[root], *ctx, locals);
             set_cop1_cs(staged_roots[root].cop1);
-            if (apply_audio) {
-
-                for (const auto [address, offset] : {std::pair{0x8000A22CU, 0U},
-                                                    std::pair{0x8000A1D0U, 1U}}) {
-                    recomp_context call = *ctx;
-                    call.r29 -= 0x40;
-                    call.f_odd = call.mips3_float_mode ? &call.f1.u32l : &call.f0.u32h;
-                    call.r4 = rdram[(0x1002F0 + offset) ^ 3U];
-                    get_function(int32_t(address))(rdram, &call);
-                }
-            }
         }
         parked &= ~bit;
         if (parked == 0) complete();

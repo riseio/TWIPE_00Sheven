@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <algorithm>
+#include <cstdio>
 #include <mutex>
 #include <string>
 #include "elements/ui_element.h"

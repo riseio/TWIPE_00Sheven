@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(TWINERecompiled VERSION 0.1.74 LANGUAGES C CXX)
+project(TWINERecompiled VERSION 0.1.82 LANGUAGES C CXX)
 file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/twine-version.txt"
     CONTENT "${PROJECT_VERSION}\n")
 execute_process(
@@ -13,6 +13,7 @@ if(NOT TWINE_SOURCE_REVISION)
     set(TWINE_SOURCE_REVISION "unversioned")
 endif()
 execute_process(
+
     COMMAND git -c core.autocrlf=true status --porcelain=v1
         --untracked-files=no
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
@@ -31,6 +32,10 @@ execute_process(
     OUTPUT_VARIABLE TWINE_SUBMODULE_STATUS
     OUTPUT_STRIP_TRAILING_WHITESPACE
     ERROR_QUIET)
+string(SHA256 TWINE_DEPENDENCY_REVISION "${TWINE_SUBMODULE_STATUS}")
+string(SUBSTRING "${TWINE_DEPENDENCY_REVISION}" 0 12
+    TWINE_DEPENDENCY_REVISION)
+
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
@@ -47,10 +52,27 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24")
 endif()
 
 option(TWINE_TOOLS_ONLY "Build only N64Recomp and RSPRecomp for bootstrap" OFF)
+include(CMake/TwineWindowsManifest.cmake)
+if(MSVC)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
+    include(InstallRequiredSystemLibraries)
+    if(NOT CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+        message(FATAL_ERROR "MSVC redistributable runtime is unavailable")
+    endif()
+endif()
+function(twine_configure_windows_tools)
+    if(MSVC)
+
+        foreach(tool N64RecompCLI RSPRecomp)
+            twine_windows_manifest(${tool} TRUE ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS})
+        endforeach()
+    endif()
+endfunction()
 if(TWINE_TOOLS_ONLY)
     add_subdirectory(
         lib/N64ModernRuntime/N64Recomp
         "${CMAKE_BINARY_DIR}/lib/N64ModernRuntime/librecomp/N64Recomp")
+    twine_configure_windows_tools()
     return()
 endif()
 
@@ -69,6 +91,7 @@ add_compile_definitions(HLSL_CPU __PRFCHWINTRIN_H)
 add_subdirectory(lib/rt64 "${CMAKE_BINARY_DIR}/rt64")
 set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(lib/N64ModernRuntime)
+twine_configure_windows_tools()
 target_include_directories(rt64 PRIVATE "${CMAKE_BINARY_DIR}/rt64/src")
 
 if(WIN32)
@@ -168,24 +191,15 @@ set(TWINE_RUNTIME_ASSET_COMMANDS
         "${TWINE_RUNTIME_STAGE_DIR}/assets/promptfont")
 set(TWINE_RUNTIME_ASSET_DEPENDENCIES ${TWINE_UI_ASSETS})
 list(APPEND TWINE_RUNTIME_ASSET_DEPENDENCIES
-    "${CMAKE_SOURCE_DIR}/NOTICES"
     "${CMAKE_SOURCE_DIR}/lib/RecompFrontend/recompui/lib/RmlUi/Samples/assets/LatoLatin-Regular.ttf"
     "${CMAKE_SOURCE_DIR}/lib/RecompFrontend/recompui/lib/RmlUi/Samples/assets/LatoLatin-Bold.ttf")
 list(APPEND TWINE_RUNTIME_ASSET_COMMANDS
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/NOTICES"
-        "${TWINE_RUNTIME_STAGE_DIR}/NOTICES"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
         "${CMAKE_SOURCE_DIR}/lib/RecompFrontend/recompui/lib/RmlUi/Samples/assets/LatoLatin-Regular.ttf"
         "${CMAKE_SOURCE_DIR}/lib/RecompFrontend/recompui/lib/RmlUi/Samples/assets/LatoLatin-Bold.ttf"
         "${TWINE_RUNTIME_STAGE_DIR}/assets")
 if(WIN32)
 
-    set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
-    include(InstallRequiredSystemLibraries)
-    if(NOT CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
-        message(FATAL_ERROR "MSVC redistributable runtime is unavailable")
-    endif()
     list(APPEND TWINE_RUNTIME_ASSET_DEPENDENCIES
         ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
         "${sdl2_SOURCE_DIR}/lib/x64/SDL2.dll"
@@ -207,6 +221,17 @@ if(WIN32)
             "${RT64_DXC_ROOT}/LICENSE-MIT.txt"
             "${RT64_DXC_ROOT}/LICENSE-MS.txt"
             "${TWINE_RUNTIME_STAGE_DIR}/licenses/dxc")
+    set(TWINE_PORTABLE_DLLS ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
+        "${sdl2_SOURCE_DIR}/lib/x64/SDL2.dll"
+        "${CMAKE_SOURCE_DIR}/lib/RecompFrontend/recompui/lib/freetype-windows-binaries/release dll/win64/freetype.dll"
+        ${DXC_RUNTIME_LIBRARIES})
+    set(TWINE_PORTABLE_DLL_NAMES "")
+    foreach(dll IN LISTS TWINE_PORTABLE_DLLS)
+        get_filename_component(dll_name "${dll}" NAME)
+        string(APPEND TWINE_PORTABLE_DLL_NAMES "${dll_name}\n")
+    endforeach()
+    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/portable-dlls.txt"
+        CONTENT "${TWINE_PORTABLE_DLL_NAMES}")
 endif()
 add_custom_command(
     OUTPUT "${TWINE_RUNTIME_ASSET_STAMP}"
@@ -257,15 +282,20 @@ set(TWINE_RUNTIME_SOURCES
     src/save_state_game.cpp
     src/save_state_shortcuts.cpp
     src/audio_host.cpp
-    src/audio_settings.cpp
     src/audio_status_ui.cpp
     src/resume_recovery.cpp
     src/steam_deck_grips.cpp
     src/twine_qol.cpp
+    src/field_of_view.cpp
+    src/field_of_view_ui.cpp
+    src/display_list_lifetime.cpp
+    src/controller_deadzone.cpp
+    src/look_settings.cpp
+    src/impact_effects.cpp
     src/modern_grapple.cpp
     src/world_render_context.cpp
     src/native_queries.cpp
-    src/native_render_tags.cpp src/native_visibility.cpp
+    src/native_render_tags.cpp src/native_visibility.cpp src/visibility_stack.cpp
     src/native_ui_render.cpp
     src/pause_background.cpp
     src/font_reconstruction.cpp
@@ -371,9 +401,13 @@ function(twine_configure_executable target)
     target_compile_definitions(${target} PRIVATE
         TWINE_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
         TWINE_VERSION_MINOR=${PROJECT_VERSION_MINOR}
-        TWINE_VERSION_PATCH=${PROJECT_VERSION_PATCH})
+        TWINE_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+        TWINE_BUILD_ID="${TWINE_SOURCE_REVISION}"
+        TWINE_DEPENDENCY_ID="${TWINE_DEPENDENCY_REVISION}"
+        TWINE_BUILD_PLATFORM="${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
     if(MSVC)
         target_compile_options(${target} PRIVATE /bigobj /fp:strict)
+        twine_windows_manifest(${target} FALSE ${TWINE_PORTABLE_DLLS})
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
         target_compile_options(${target} PRIVATE -msse4.1)
     endif()

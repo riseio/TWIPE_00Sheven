@@ -8,6 +8,7 @@
 #include "native_render_matrix.hpp"
 #include "native_camera_history.hpp"
 #include "native_visibility.hpp"
+#include "visibility_stack.hpp"
 #include "native_render_commands.hpp"
 
 #include <cstdio>
@@ -433,6 +434,7 @@ extern "C" void twine_prepare_visibility(uint8_t* rdram, uint32_t camera, uint32
     if (!active || view >= active->cameras.size() || active->cameras[view] != camera) {
         throw std::runtime_error("Native visibility lost its render camera");
     }
+    twine::render::prepare_visibility_stack(reserve(twine::render::visibility_stack_size));
     const uint32_t frame=uint32_t(TWINE_MEM_W(0,0x80117728U));
     if (!native_range(frame,0x360)) { throw std::runtime_error("Invalid visibility matrix frame"); }
     auto lens=read_matrix(rdram,frame+view*64);

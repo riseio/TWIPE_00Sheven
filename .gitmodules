@@ -5,7 +5,7 @@
 [submodule "lib/RecompFrontend"]
 	path = lib/RecompFrontend
 	url = https://github.com/riseio/TWIPE.git
-	branch = dependencies/offline-native-setup
+	branch = dependencies/settings-input-capture
 [submodule "lib/rt64"]
 	path = lib/rt64
 	url = https://github.com/riseio/TWIPE.git

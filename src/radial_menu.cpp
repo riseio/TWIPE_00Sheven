@@ -7,11 +7,13 @@
 #include <atomic>
 #include <bit>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 #include "SDL.h"
 
 #include "radial_menu.hpp"
+#include "modern_input.hpp"
 #include "radial_view.hpp"
 #include "radial_text.hpp"
 #include "font_textures.hpp"
@@ -61,7 +63,10 @@ std::array<std::atomic<uint64_t>, player_count> published_weapons;
 std::array<std::atomic<uint64_t>, player_count> published_gadgets;
 
 std::array<std::atomic<uint16_t>, player_count> published_equipment;
-
+std::array<uint64_t, player_count> logged_weapons{~uint64_t{0}, ~uint64_t{0},
+    ~uint64_t{0}, ~uint64_t{0}};
+std::array<uint64_t, player_count> logged_gadgets{~uint64_t{0}, ~uint64_t{0},
+    ~uint64_t{0}, ~uint64_t{0}};
 std::array<std::atomic<uint8_t>, item_end> published_resource;
 std::array<std::array<char, 40>, item_end> item_names{};
 uint64_t named_items = 0;
@@ -370,7 +375,8 @@ InputResult update_input(
     uint8_t watch_shortcuts,
     bool cancel_down,
     float direction_x,
-    float direction_y
+    float direction_y,
+    int32_t weapon_scroll
 ) {
     if (player < 0 || static_cast<size_t>(player) >= players.size()) {
         return {};
@@ -400,6 +406,17 @@ InputResult update_input(
     const bool was_open = state.open;
 
     InputResult result{};
+    if (weapon_scroll != 0 && !was_open && !weapon_down && !gadget_down && !cancel_down) {
+        const uint8_t pending = state.pending_weapon.peek();
+        const uint8_t current = pending != 0xFF ? pending :
+            twine::modern_input::weapon_family(current_item(player));
+        const uint8_t selected = scroll_owned(state.weapons, current, weapon_scroll);
+        if (selected != 0xFF) {
+            state.pending_gadget.clear();
+            state.pending_weapon.queue(selected, lifecycle_epoch);
+            result.tap_actions |= 2U;
+        }
+    }
     result.consumed_buttons = ((watch_shortcuts & 1U) ? 0x0200U : 0U) |
         ((watch_shortcuts & 2U) ? 0x0400U : 0U) |
         ((watch_shortcuts & 4U) ? 0x0100U : 0U);
@@ -457,6 +474,10 @@ InputResult update_input(
         state.pointer_session = ++next_pointer_session;
         state.selection = {};
     }
+    if (!was_open && state.open) {
+        const uint64_t items = state.gadget_open ? state.gadgets : state.weapons;
+
+    }
     if (!state.open) {
         return result;
     }
@@ -468,6 +489,8 @@ InputResult update_input(
         state.gadget_open ? item_end : weapon_end,
         count);
     const uint64_t pointer = player == 0 ? published_pointer.load(std::memory_order_acquire) : 0;
+    const int previous_selection = state.selection.index;
+    const uint64_t previous_pointer = state.selection.last_pointer;
     state.selection.update({direction_x, direction_y}, pointer,
         state.pointer_session, std::span(items.data(), count));
 
@@ -665,7 +688,11 @@ extern "C" void twine_radial_sync(uint8_t* rdram, recomp_context* ctx) {
         std::memory_order_relaxed);
     published_weapons[player].store(weapons, std::memory_order_release);
     published_gadgets[player].store(gadgets, std::memory_order_release);
+    if (logged_weapons[player] != weapons || logged_gadgets[player] != gadgets) {
 
+        logged_weapons[player] = weapons;
+        logged_gadgets[player] = gadgets;
+    }
 }
 
 extern "C" void twine_radial_apply_weapon(
@@ -748,6 +775,7 @@ extern "C" void twine_radial_apply_special(
         return;
     }
 
+    const uint8_t before = TWINE_MEM_BU(0x185, inventory);
     const recomp_context saved = *ctx;
     ctx->r4 = static_cast<int32_t>(inventory);
     if (item == twine::radial::night_vision_virtual_item) {
@@ -757,6 +785,11 @@ extern "C" void twine_radial_apply_special(
         func_80070528(rdram, ctx);
     }
     *ctx = saved;
+    const uint32_t root = TWINE_MEM_W(
+        static_cast<uint32_t>(player * 4U), 0x80109688U);
+    const uint32_t view_flags =
+        twine::grapple::rdram_range_valid(root, 0x104U)
+            ? TWINE_MEM_W(0x100, root) : 0U;
 
 }
 

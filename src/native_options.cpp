@@ -1,6 +1,7 @@
 #include "native_options.hpp"
 
 #include <atomic>
+#include <cstdio>
 
 #include "cheats.hpp"
 #include "recompui/config.h"
@@ -20,6 +21,20 @@ bool valid_rdram_address(uint32_t address, uint32_t size) {
     const uint32_t physical = address & 0x1FFFFFFFU;
     return (segment == 0x80000000U || segment == 0xA0000000U) &&
         size <= rdram_size && physical <= rdram_size - size;
+}
+
+const char* tab_name(twine::native_options::Tab tab) {
+    switch (tab) {
+    case twine::native_options::Tab::controls:
+        return "controls";
+    case twine::native_options::Tab::graphics:
+        return "graphics";
+    case twine::native_options::Tab::cheats:
+        return "cheats";
+    case twine::native_options::Tab::none:
+        return "none";
+    }
+    return "unknown";
 }
 
 }

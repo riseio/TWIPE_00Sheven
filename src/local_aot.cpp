@@ -177,20 +177,86 @@ struct Lock {
         regular(file);
         handle = CreateFileW(file.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS,
                              FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
-        if (handle == INVALID_HANDLE_VALUE) throw std::runtime_error("Another Twine instance is preparing this installation");
+        if (handle == INVALID_HANDLE_VALUE) {
+            const auto error = GetLastError();
+            if (error == ERROR_SHARING_VIOLATION || error == ERROR_LOCK_VIOLATION)
+                throw std::runtime_error("Another Twine instance is preparing this installation");
+            throw std::runtime_error("Cannot open the native setup lock (Windows error " +
+                std::to_string(error) + "). Check that the game folder is writable:\n" + utf8(file));
+        }
     }
     ~Lock() { CloseHandle(handle); }
 #else
     int handle = -1;
     explicit Lock(const fs::path& file) {
         handle = open(file.c_str(), O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0600);
-        if (handle < 0) throw std::runtime_error("Cannot open local compilation lock");
-        if (flock(handle, LOCK_EX | LOCK_NB)) { close(handle); handle = -1;
-            throw std::runtime_error("Another Twine instance is preparing this installation"); }
+        if (handle < 0) throw std::runtime_error("Cannot open the native setup lock (error " +
+            std::to_string(errno) + "). Check that the game folder is writable:\n" + utf8(file));
+        if (flock(handle, LOCK_EX | LOCK_NB)) {
+            const auto error = errno;
+            close(handle); handle = -1;
+            if (error == EWOULDBLOCK || error == EAGAIN)
+                throw std::runtime_error("Another Twine instance is preparing this installation");
+            throw std::runtime_error("Cannot lock native setup files (error " + std::to_string(error) + ")");
+        }
     }
     ~Lock() { close(handle); }
 #endif
 };
+
+struct CompilerImage {
+    fs::path executable;
+#ifdef _WIN32
+    Lock lock;
+    CompilerImage(const fs::path& source, const fs::path& cache)
+        : executable(cache / "zig.exe"), lock(cache / "compiler.lock") {
+        if (fs::u8path(utf8(executable)).native().size() >= MAX_PATH - 2)
+            throw std::runtime_error("The game folder is too deeply nested for the offline compiler. "
+                "Move the game folder closer to the drive root and try again.");
+        regular(executable);
+        if (fs::exists(executable) && !fs::is_regular_file(executable))
+            throw std::runtime_error("The compiler cache contains an unexpected file type");
+        fs::remove(executable);
+        std::error_code error;
+        fs::create_hard_link(source, executable, error);
+        if (error) {
+
+            try { fs::copy_file(source, executable); }
+            catch (...) { fs::remove(executable, error); throw; }
+        }
+    }
+    ~CompilerImage() {
+        std::error_code error;
+        fs::remove(executable, error);
+
+    }
+#else
+    CompilerImage(const fs::path& source, const fs::path&) : executable(source) {}
+#endif
+};
+#ifndef _WIN32
+
+struct ToolDirectory {
+    int handle = -1;
+    fs::path path;
+    explicit ToolDirectory(const fs::path& directory) {
+        handle = open(directory.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+        if (handle < 0) throw std::runtime_error("Cannot open the native setup directory (error " +
+            std::to_string(errno) + ")");
+        try {
+            path = fs::path("/proc") / std::to_string(getpid()) / "fd" / std::to_string(handle);
+            if (!fs::equivalent(directory, path))
+                throw std::runtime_error("Native setup requires access to its own /proc file descriptors");
+        } catch (...) {
+            close(handle); handle = -1;
+            throw;
+        }
+    }
+    ~ToolDirectory() { close(handle); }
+    ToolDirectory(const ToolDirectory&) = delete;
+    ToolDirectory& operator=(const ToolDirectory&) = delete;
+};
+#endif
 
 std::string checksum(const fs::path& file) {
     regular(file);
@@ -318,7 +384,8 @@ bool tool_environment(std::string_view name) {
         if (name == key) return true;
     return false;
 }
-void execute(std::vector<std::string> args, const fs::path& working, Progress& progress) {
+void execute(std::vector<std::string> args, const fs::path& working, Progress& progress,
+        const fs::path& compiler_library = {}) {
     progress.check();
     directory(working / "temporary");
 #ifdef _WIN32
@@ -345,14 +412,14 @@ void execute(std::vector<std::string> args, const fs::path& working, Progress& p
     PROCESS_INFORMATION process{};
 
     LPWCH inherited = GetEnvironmentStringsW();
-    std::wstring environment;
+    std::vector<std::wstring> environment_entries;
     if (!inherited) { CloseHandle(job); CloseHandle(log); throw std::runtime_error("Cannot read compiler environment"); }
     for (const wchar_t* item = inherited; *item; item += wcslen(item) + 1) {
         std::string key;
         for (const wchar_t* letter = item; *letter && *letter != L'='; ++letter)
             key += *letter >= L'a' && *letter <= L'z' ? char(*letter - L'a' + L'A') : char(*letter);
         if (!tool_environment(key)) {
-            environment.append(item); environment += L'\0';
+            environment_entries.emplace_back(item);
         }
     }
     FreeEnvironmentStringsW(inherited);
@@ -363,25 +430,32 @@ void execute(std::vector<std::string> args, const fs::path& working, Progress& p
         if (value.starts_with(L"\\\\?\\")) return value.substr(4);
         return value;
     };
-    environment += L"ZIG_GLOBAL_CACHE_DIR=" + compiler_cache_path(working / "zig-global"); environment += L'\0';
-    environment += L"ZIG_LOCAL_CACHE_DIR=" + compiler_cache_path(working / "zig-local"); environment += L'\0';
-    environment += L"PATH="; environment += L'\0';
+    environment_entries.push_back(L"ZIG_GLOBAL_CACHE_DIR=" + compiler_cache_path(working / "zig-global"));
+    environment_entries.push_back(L"ZIG_LOCAL_CACHE_DIR=" + compiler_cache_path(working / "zig-local"));
+    if (!compiler_library.empty())
+        environment_entries.push_back(L"ZIG_LIB_DIR=" + compiler_cache_path(compiler_library));
+    environment_entries.emplace_back(L"PATH=");
     for (const auto* key : {L"TMP=", L"TEMP="}) {
-        environment += key + compiler_cache_path(working / "temporary"); environment += L'\0';
+        environment_entries.push_back(key + compiler_cache_path(working / "temporary"));
     }
+    std::sort(environment_entries.begin(), environment_entries.end(), [](const auto& a, const auto& b) {
+        return CompareStringOrdinal(a.data(), int(a.size()), b.data(), int(b.size()), TRUE) == CSTR_LESS_THAN;
+    });
+    std::wstring environment;
+    for (const auto& entry : environment_entries) { environment += entry; environment += L'\0'; }
     environment += L'\0';
-    const auto application = fs::u8path(args[0]).wstring();
-    auto process_directory = working.wstring();
-    if (process_directory.size() >= MAX_PATH - 2) {
-        const auto required = GetShortPathNameW(working.c_str(), nullptr, 0);
-        if (required) {
-            std::wstring shortened(required, L'\0');
-            const auto written = GetShortPathNameW(working.c_str(), shortened.data(), required);
-            if (written && written < required) { shortened.resize(written); process_directory = std::move(shortened); }
-        }
+    auto application = fs::u8path(args[0]).wstring();
+    if (!application.starts_with(L"\\\\?\\"))
+        application = application.starts_with(L"\\\\") ? L"\\\\?\\UNC\\" + application.substr(2) : L"\\\\?\\" + application;
+
+    std::array<wchar_t, MAX_PATH> process_directory{};
+    const auto directory_size = GetWindowsDirectoryW(process_directory.data(), DWORD(process_directory.size()));
+    if (!directory_size || directory_size >= process_directory.size()) {
+        CloseHandle(job); CloseHandle(log);
+        throw std::runtime_error("Cannot resolve the compiler process working directory");
     }
     bool started = CreateProcessW(application.c_str(), command.data(), nullptr, nullptr, TRUE,
-        CREATE_NO_WINDOW | CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT, environment.data(), process_directory.c_str(), &startup, &process);
+        CREATE_NO_WINDOW | CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT, environment.data(), process_directory.data(), &startup, &process);
     const auto launch_error = started ? ERROR_SUCCESS : GetLastError();
     CloseHandle(log);
     if (!started) { CloseHandle(job); throw std::runtime_error("Cannot launch offline compiler (Windows error " + std::to_string(launch_error) + ")"); }
@@ -390,7 +464,14 @@ void execute(std::vector<std::string> args, const fs::path& working, Progress& p
         CloseHandle(process.hThread); CloseHandle(process.hProcess); CloseHandle(job);
         throw std::runtime_error("Cannot contain offline compiler");
     }
-    ResumeThread(process.hThread); CloseHandle(process.hThread);
+    if (ResumeThread(process.hThread) == DWORD(-1)) {
+        const auto error = GetLastError();
+        CloseHandle(job);
+        WaitForSingleObject(process.hProcess, INFINITE);
+        CloseHandle(process.hThread); CloseHandle(process.hProcess);
+        throw std::runtime_error("Cannot start offline compiler (Windows error " + std::to_string(error) + ")");
+    }
+    CloseHandle(process.hThread);
     try {
         for (;;) {
             const auto status = WaitForSingleObject(process.hProcess, 50);
@@ -404,8 +485,11 @@ void execute(std::vector<std::string> args, const fs::path& working, Progress& p
         CloseHandle(process.hProcess);
         throw;
     }
-    DWORD code = 1; GetExitCodeProcess(process.hProcess, &code);
+    DWORD code = 1;
+    const bool got_code = GetExitCodeProcess(process.hProcess, &code);
+    const auto exit_error = got_code ? ERROR_SUCCESS : GetLastError();
     CloseHandle(process.hProcess); CloseHandle(job);
+    if (!got_code) throw std::runtime_error("Cannot read offline compiler result (Windows error " + std::to_string(exit_error) + ")");
 #else
 
     if (args[0].find("/generators/") != std::string::npos) {
@@ -423,22 +507,31 @@ void execute(std::vector<std::string> args, const fs::path& working, Progress& p
     }
     environment.push_back("ZIG_GLOBAL_CACHE_DIR=" + (working / "zig-global").string());
     environment.push_back("ZIG_LOCAL_CACHE_DIR=" + (working / "zig-local").string());
+    if (!compiler_library.empty()) environment.push_back("ZIG_LIB_DIR=" + compiler_library.string());
     environment.push_back("PATH=");
     environment.push_back("TMPDIR=" + (working / "temporary").string());
     std::vector<char*> envp;
     for (auto& value : environment) envp.push_back(value.data());
     envp.push_back(nullptr);
-    posix_spawn_file_actions_t actions; posix_spawn_file_actions_init(&actions);
-    posix_spawnattr_t attributes; posix_spawnattr_init(&attributes);
-    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
-    posix_spawnattr_setpgroup(&attributes, 0);
-    int error = posix_spawn_file_actions_addchdir_np(&actions, working.c_str());
-    error |= posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, (working / "compiler.log").c_str(), O_CREAT | O_WRONLY | O_APPEND | O_NOFOLLOW, 0600);
-    error |= posix_spawn_file_actions_adddup2(&actions, STDOUT_FILENO, STDERR_FILENO);
+    posix_spawn_file_actions_t actions;
+    int error = posix_spawn_file_actions_init(&actions);
+    if (error) throw std::runtime_error("Cannot prepare compiler file actions (error " + std::to_string(error) + ")");
+    posix_spawnattr_t attributes;
+    error = posix_spawnattr_init(&attributes);
+    if (error) {
+        posix_spawn_file_actions_destroy(&actions);
+        throw std::runtime_error("Cannot prepare compiler process attributes (error " + std::to_string(error) + ")");
+    }
+    error = posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
+    if (!error) error = posix_spawnattr_setpgroup(&attributes, 0);
+
+    if (!error) error = posix_spawn_file_actions_addchdir_np(&actions, "/");
+    if (!error) error = posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, (working / "compiler.log").c_str(), O_CREAT | O_WRONLY | O_APPEND | O_NOFOLLOW, 0600);
+    if (!error) error = posix_spawn_file_actions_adddup2(&actions, STDOUT_FILENO, STDERR_FILENO);
     pid_t child = -1;
     if (!error) error = posix_spawn(&child, argv[0], &actions, &attributes, argv.data(), envp.data());
     posix_spawnattr_destroy(&attributes); posix_spawn_file_actions_destroy(&actions);
-    if (error) throw std::runtime_error("Cannot launch offline compiler");
+    if (error) throw std::runtime_error("Cannot launch offline compiler (error " + std::to_string(error) + ")");
     int status = 0;
     try {
         for (;;) {
@@ -453,12 +546,23 @@ void execute(std::vector<std::string> args, const fs::path& working, Progress& p
         while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
         throw;
     }
-    int code = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+    int code = WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? 128 + WTERMSIG(status) : 1;
 #endif
     if (code) throw std::runtime_error("Offline tool " + fs::u8path(args[0]).filename().string() +
         " exited with status " + std::to_string(code) + "; see compiler.log in the installation cache.");
 }
-void compile(const fs::path& tools, const fs::path& working, std::span<const uint8_t> rom, Progress& progress) {
+void compile(const fs::path& tool_directory, const fs::path& staging_directory, const fs::path& cache,
+        std::span<const uint8_t> rom, Progress& progress) {
+#ifdef _WIN32
+    const auto& tools = tool_directory;
+    const auto& working = staging_directory;
+#else
+    ToolDirectory tool_paths(tool_directory);
+    ToolDirectory staging_paths(staging_directory);
+    const auto& tools = tool_paths.path;
+    const auto& working = staging_paths.path;
+#endif
+    CompilerImage compiler_image(tools / "compiler" / (std::string("zig") + tool_suffix), cache);
     for (const auto* name : {"cpu.toml", "rsp.toml", "symbols.toml", "imports.c", "module.cpp"})
         fs::copy_file(tools / name, working / name, fs::copy_options::overwrite_existing);
     {
@@ -468,8 +572,13 @@ void compile(const fs::path& tools, const fs::path& working, std::span<const uin
         if (!stream) throw std::runtime_error("Cannot stage validated input for local compilation");
     }
     progress.report("Generating local game code");
-    execute({utf8(tools / "generators" / (std::string("N64Recomp") + tool_suffix)), "./cpu.toml"}, working, progress);
-    execute({utf8(tools / "generators" / (std::string("RSPRecomp") + tool_suffix)), "./rsp.toml"}, working, progress);
+
+    const auto config_argument = [&](const char* name) {
+        const auto value = (working / name).u8string();
+        return std::string(value.begin(), value.end());
+    };
+    execute({utf8(tools / "generators" / (std::string("N64Recomp") + tool_suffix)), config_argument("cpu.toml")}, working, progress);
+    execute({utf8(tools / "generators" / (std::string("RSPRecomp") + tool_suffix)), config_argument("rsp.toml")}, working, progress);
     fs::remove(working / "input.z64");
     std::vector<fs::path> sources;
     for (const auto& item : fs::directory_iterator(working / "cpu"))
@@ -479,7 +588,7 @@ void compile(const fs::path& tools, const fs::path& working, std::span<const uin
     sources.push_back(working / "imports.c");
     sources.push_back(working / "rsp.cpp");
     sources.push_back(working / "module.cpp");
-    const auto compiler = utf8(tools / "compiler" / (std::string("zig") + tool_suffix));
+    const auto compiler = utf8(compiler_image.executable);
     std::vector<std::string> objects;
     for (size_t index = 0; index < sources.size(); ++index) {
         progress.report("Compiling native game code", static_cast<uint32_t>(index), static_cast<uint32_t>(sources.size()));
@@ -489,7 +598,7 @@ void compile(const fs::path& tools, const fs::path& working, std::span<const uin
             sources[index].extension() == ".c" ? recipe::c_standard : recipe::cpp_standard,
             "-c", utf8(sources[index]), "-o", object};
         args.insert(args.end(), recipe::compile_flags.begin(), recipe::compile_flags.end());
-        execute(std::move(args), working, progress);
+        execute(std::move(args), working, progress, tools / "compiler" / "lib");
         objects.push_back(object);
     }
     progress.report("Linking native game code");
@@ -499,7 +608,7 @@ void compile(const fs::path& tools, const fs::path& working, std::span<const uin
     link.push_back(recipe::no_undefined);
 #endif
     link.insert(link.end(), objects.begin(), objects.end());
-    execute(std::move(link), working, progress);
+    execute(std::move(link), working, progress, tools / "compiler" / "lib");
 }
 }
 const TwineAotModule& module() {
@@ -512,6 +621,11 @@ bool prepare() {
 bool prepare(std::span<const uint8_t> rom) {
     static std::mutex preparation_mutex;
     std::lock_guard lock(preparation_mutex);
+    const auto started = std::chrono::steady_clock::now();
+    const auto elapsed_ms = [&] {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - started).count();
+    };
     const auto data_root = recomp::get_config_path();
     try {
         if (rom.size() != 33554432 || Sha256::digest(rom) !=
@@ -563,7 +677,7 @@ bool prepare(std::span<const uint8_t> rom) {
                 directory(stage);
                 progress.report("Preparing offline tools");
                 extract(tools, progress);
-                compile(tools, stage, rom, progress);
+                compile(tools, stage, root.parent_path().parent_path(), rom, progress);
                 progress.check();
                 const auto identity = checksum(stage / library_name);
                 if (!load(stage / library_name, false)) throw std::runtime_error("Locally compiled module failed compatibility validation");
@@ -602,7 +716,7 @@ bool prepare(std::span<const uint8_t> rom) {
 
         const auto message = std::string("Native code setup did not finish. No existing game data was changed.\n\n") +
             error.what() + "\n\nCompiler log (if available):\n" +
-            fs::absolute(data_root / "cache" / "local-aot" / kKitIdentity / "compiler.log").string();
+            utf8(data_root / "cache" / "local-aot" / kKitIdentity / "compiler.log");
         recompui::queue_ui_action([message] {
             recompui::open_info_prompt("Native code setup failed", message, "OK", [] {});
         });

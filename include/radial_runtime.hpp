@@ -29,7 +29,8 @@ InputResult update_input(
     uint8_t watch_shortcuts,
     bool cancel_down,
     float direction_x,
-    float direction_y);
+    float direction_y,
+    int32_t weapon_scroll = 0);
 void clear(int player);
 bool active(int player);
 uint64_t weapon_mask(int player);

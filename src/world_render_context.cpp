@@ -1,6 +1,7 @@
 #include "world_render_context.hpp"
 
 #include "native_queries.hpp"
+#include <cstdio>
 #include "twine_recomp.h"
 #include "librecomp/addresses.hpp"
 #include "shared/rt64_modern_grapple.h"
@@ -35,8 +36,13 @@ extern "C" void twine_capture_render_task(uint8_t* rdram, recomp_context* ctx) {
             state.worldMatrixAddress = twine_render_matrix_address(task, worldMatrix) & 0x1FFFFFFFU;
         }
     }
-    if (valid) {
-        RT64::captureModernRenderTask(displayList, state);
+    if (!valid || !RT64::captureModernRenderTask(displayList, state)) {
+
+        static unsigned reports = 0;
+        if (reports++ < 8) {
+            std::fprintf(stderr, "TWINE_RENDER_TASK capture_failed task=%08X dl=%08X size=%u\n",
+                task, displayList, size);
+        }
     }
 }
 

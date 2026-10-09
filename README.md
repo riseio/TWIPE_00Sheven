@@ -21,6 +21,10 @@ replace the executable. Keep that folder when updating or moving the game.
 ## Enhancements
 
 - Widescreen and ultrawide support.
+- Adjustable vertical FOV from 40 to 100 degrees, with a reset to the original 60-degree view.
+- Independent horizontal and vertical inversion for mouse and right-stick aiming.
+- Mouse-wheel weapon cycling when not using scope zoom.
+- W/S acceleration and braking while skiing in Cold Reception.
 - Interpolated rendering for high refresh rate displays.
 - Mouse aiming and modern twin-stick controls.
 - Larger magazines: E.g., Meyer TMP **25 → 60**, Deutsche M45 **25 → 40**,
@@ -40,7 +44,7 @@ replace the executable. Keep that folder when updating or moving the game.
 - Crosshair colours for visible enemies and friendly NPCs, plus grapple-target feedback.
 - Live objectives while playing, persistent quick saves/loads and automatic campaign-progress saving.
 - Sharper game fonts and controller/keyboard prompts that follow your bindings.
-- Audio output-device selection and recovery when devices reconnect.
+- Audio recovery when devices reconnect.
 - Steam Deck rear-button shortcuts and suspend/resume recovery.
 - Portable saves and settings, plus a campaign-reset option that preserves your controls and display settings.
 
@@ -56,6 +60,7 @@ replace the executable. Keep that folder when updating or moving the game.
 - **Invincible Friendly NPCs:** protect allies and civilians from damage and player-hit mission failures.
 - **Double Watch Darts:** double dart grants, pickups and capacity on the next mission or restart.
 - **Regenerating Health:** Like Halo style if you want it.
+- **Impact Effects:** enhanced hit effects, enabled by default. Original effects remain available.
 
 ## Other optional settings:
 
@@ -76,7 +81,7 @@ replace the executable. Keep that folder when updating or moving the game.
 | Shift | Sprint |
 | F | Interact |
 | R | Reload |
-| E | Cycle weapon / hold for weapon radial |
+| E / mouse wheel | Cycle weapon; hold E for weapon radial |
 | Q | Cycle gadget / hold for gadget radial |
 | V | Change weapon or gadget mode |
 | Z / X, mouse side buttons, or mouse wheel while aiming | Zoom in / out |
@@ -86,6 +91,9 @@ replace the executable. Keep that folder when updating or moving the game.
 | Tilde (~) | Toggle enhanced textures |
 | Enter | Pause |
 | Escape | Settings |
+
+On Cold Reception's ski sections, W accelerates and S brakes. The mouse wheel
+continues to control zoom while aiming with a scoped weapon.
 
 
 ## Steam Deck controls

@@ -1,6 +1,8 @@
 #include "night_vision_overlay.hpp"
 #include <algorithm>
 #include <array>
+#include <cstdio>
+#include <cstdlib>
 #include "hud_layout.hpp"
 #include "twine_recomp.h"
 
@@ -55,5 +57,6 @@ void prepare(uint8_t* rdram, uint32_t root, bool mission_ui) {
         if (next == node) break;
         node = next;
     }
+
 }
 }

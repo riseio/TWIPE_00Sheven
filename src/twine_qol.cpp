@@ -3,6 +3,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -13,7 +14,7 @@
 namespace twine::qol {
 namespace {
 
-std::array<std::atomic<uint8_t>, 11> setting_values{};
+std::array<std::atomic<uint8_t>, 12> setting_values{};
 std::atomic<uint64_t> lifecycle{1};
 std::atomic<uint64_t> inventory_lifecycle{1};
 
@@ -92,6 +93,11 @@ void add_setting(
 }
 
 void register_settings(recomp::config::Config& config) {
+    add_setting(
+        config, 11, impact_effects_key, "Impact Effects",
+        "Enhanced adds brief blood puffs on character hits and dust puffs on solid surfaces.",
+        "original", "Original", "enhanced", "Enhanced",
+        static_cast<uint32_t>(default_impact_effects));
     add_setting(
         config, 0, grapple_mode_key, "Grapple",
         "Classic preserves the original gadget. Modern Pull adds physical pull traversal while keeping scripted grapple interactions.",
@@ -175,6 +181,7 @@ Settings settings() {
         load_mode<DartAmmoMode>(8),
         load_mode<HealthRegenerationMode>(9),
         load_mode<WeaponModeMemory>(10),
+        load_mode<ImpactEffects>(11),
     };
 }
 

@@ -2,6 +2,7 @@
 #define RADIAL_MENU_HPP
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstddef>
@@ -68,6 +69,22 @@ struct WatchShortcut {
         return owned(inventory, item) ? item : 0xFF;
     }
 };
+
+inline uint8_t scroll_owned(uint64_t inventory, uint8_t current, int32_t steps) {
+
+    std::array<uint8_t, 64> items{};
+    unsigned count = 0, position = 0;
+    bool found = false;
+    for (unsigned item = 0; item < 64; ++item) {
+        if (!owned(inventory, static_cast<uint8_t>(item))) continue;
+        if (item == current) { position = count; found = true; }
+        items[count++] = static_cast<uint8_t>(item);
+    }
+    if (!count || !steps) return 0xFF;
+    if (!found) position = steps > 0 ? count - 1 : 0;
+    const auto next = (int64_t(position) + int64_t(steps) % count + count) % count;
+    return items[static_cast<size_t>(next)];
+}
 
 inline constexpr uint8_t next_owned(
     uint64_t inventory,

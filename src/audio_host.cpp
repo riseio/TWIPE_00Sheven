@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
-#include <cmath>
 #include <cinttypes>
 #include <cstdio>
 #include <limits>
@@ -15,7 +14,6 @@
 #include "SDL.h"
 #include "audio_pipeline.hpp"
 #include "audio_state_stream.hpp"
-
 #include "save_state_codec.hpp"
 #include "ultramodern/state.hpp"
 #include "librecomp/rsp.hpp"
@@ -41,7 +39,6 @@ std::atomic<SDL_AudioDeviceID> watched_device{0};
 std::atomic<DeviceStatus> status{DeviceStatus::Stopped};
 bool watching_events = false;
 bool owns_audio_subsystem = false;
-
 std::chrono::steady_clock::time_point next_resume_reopen{};
 std::mutex mutex;
 
@@ -57,31 +54,6 @@ twine::audio::SilentFrameClock silent_frames;
 std::atomic<uint64_t> callback_progress{0};
 uint64_t observed_callback_progress = 0;
 std::chrono::steady_clock::time_point last_callback_progress;
-std::mutex devices_mutex;
-OutputDevices devices;
-std::atomic<uint64_t> devices_revision{1};
-std::atomic_bool test_pending{false};
-std::atomic_bool device_list_pending{false}, preferred_missing{false};
-std::atomic<int> test_volume{0};
-
-uint32_t test_frames = 0;
-
-void publish_devices() {
-    devices.revision = devices_revision.fetch_add(1, std::memory_order_release) + 1;
-}
-
-void enumerate_devices() {
-    std::vector<std::string> names;
-    const int count = SDL_GetNumAudioDevices(0);
-    for (int index = 0; index < count; ++index) {
-        if (const char* name = SDL_GetAudioDeviceName(index, 0)) {
-            if (std::find(names.begin(), names.end(), name) == names.end()) names.emplace_back(name);
-        }
-    }
-    std::lock_guard info(devices_mutex);
-    devices.names = std::move(names);
-    publish_devices();
-}
 
 void advance_silent_device_locked() {
     if (device || !stream || state_audio_paused) return;
@@ -98,13 +70,11 @@ void close_device_locked() {
         SDL_CloseAudioDevice(device);
         device = 0;
     }
-    test_frames = 0;
     playback_started = false;
 }
 
 void close_locked() {
     close_device_locked();
-
     stream.reset();
     output.clear();
     output_frequency = 0;
@@ -157,71 +127,16 @@ bool open_device() {
     desired.channels = 2;
     desired.samples = 256;
     desired.callback = [](void*, Uint8* bytes, int count) {
-
         const size_t samples = size_t(count) / sizeof(int16_t);
 
-        const auto used = output.consume({reinterpret_cast<int16_t*>(bytes), samples});
-
-        auto* pcm = reinterpret_cast<int16_t*>(bytes);
-        for (size_t i = 0; i + 1 < samples && test_frames; i += 2, --test_frames) {
-            constexpr uint32_t duration = 28800;
-            const auto elapsed = duration - test_frames;
-            const double envelope = std::min({1.0, elapsed / 480.0, test_frames / 480.0});
-            const int tone = int(std::sin(elapsed * (6.283185307179586 * 440.0 / 48000.0)) *
-                test_volume.load(std::memory_order_relaxed) * 40 * envelope);
-            pcm[i] = int16_t(std::clamp(int(pcm[i]) + tone, -32768, 32767));
-            pcm[i + 1] = int16_t(std::clamp(int(pcm[i + 1]) + tone, -32768, 32767));
-        }
+        output.consume({reinterpret_cast<int16_t*>(bytes), samples});
         callback_progress.fetch_add(1, std::memory_order_relaxed);
         output_consumed.notify_one();
 
     };
 
     SDL_AudioSpec obtained{};
-    std::string selected;
-    bool present = false;
-    {
-        std::lock_guard info(devices_mutex);
-        selected = devices.selected;
-        present = std::find(devices.names.begin(), devices.names.end(), selected) != devices.names.end();
-    }
-
-    auto opened = selected.empty() || present
-        ? SDL_OpenAudioDevice(selected.empty() ? nullptr : selected.c_str(), 0, &desired, &obtained, 0)
-        : SDL_AudioDeviceID{0};
-    std::string error;
-    const bool fallback = !opened && !selected.empty();
-    preferred_missing = fallback;
-    if (fallback) {
-        error = present ? "Selected output unavailable: " + std::string(SDL_GetError())
-            : "The selected output is not connected.";
-        opened = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
-    }
-    if (!opened) {
-        hardware_error = SDL_GetError();
-        if (!error.empty()) error += ". ";
-        error += hardware_error;
-    }
-    std::string active;
-    if (opened) {
-        active = selected;
-        if (selected.empty() || fallback) {
-            char* default_name = nullptr;
-            SDL_AudioSpec default_spec{};
-            if (SDL_GetDefaultAudioInfo(&default_name, &default_spec, 0) == 0 && default_name)
-                active = default_name;
-            else active = "System default";
-            SDL_free(default_name);
-        }
-    }
-    {
-        std::lock_guard info(devices_mutex);
-        devices.active = active;
-        devices.error = error;
-        devices.fallback = fallback;
-        publish_devices();
-    }
-
+    const auto opened = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
     if (opened == 0) {
         return false;
     }
@@ -257,10 +172,12 @@ bool initialize_driver() {
         }
         owns_audio_subsystem = true;
     }
-    enumerate_devices();
     if (!open_device()) {
+        hardware_error = SDL_GetError();
         return false;
     }
+
+    const char* active_driver = SDL_GetCurrentAudioDriver();
 
     return true;
 }
@@ -275,7 +192,6 @@ void detach_device() {
         device = 0;
         watched_device = 0;
         playback_started = false;
-        test_frames = 0;
         silent_clock = std::chrono::steady_clock::now();
         silent_frames = {};
     }
@@ -293,25 +209,19 @@ void use_silent_output() {
     status.store(DeviceStatus::Unavailable, std::memory_order_release);
     schedule_resume_retry_locked();
 
-    std::lock_guard info(devices_mutex);
-    devices.active.clear();
-    devices.error = hardware_error;
-    publish_devices();
 }
 
 int SDLCALL watch_device(void*, SDL_Event* event) {
     if (reconfiguring_device.load(std::memory_order_acquire)) return 1;
     if ((event->type == SDL_AUDIODEVICEADDED || event->type == SDL_AUDIODEVICEREMOVED) &&
             !event->adevice.iscapture) {
-        device_list_pending = true;
         const bool relevant = event->type == SDL_AUDIODEVICEADDED
-            ? status.load(std::memory_order_acquire) == DeviceStatus::Unavailable || preferred_missing.load()
+            ? status.load(std::memory_order_acquire) == DeviceStatus::Unavailable
             : event->adevice.which == watched_device.load(std::memory_order_acquire);
-
         if (relevant) {
             device_event_pending.store(true, std::memory_order_release);
+            wake_device.notify_one();
         }
-        wake_device.notify_one();
     }
     return 1;
 }
@@ -344,7 +254,7 @@ bool initialize() {
         for (;;) {
             std::unique_lock lock(wake_mutex);
             wake_device.wait_for(lock, std::chrono::milliseconds(100), [] {
-                return stop_worker.load() || device_event_pending.load() || test_pending.load() || device_list_pending.load();
+                return stop_worker.load() || device_event_pending.load();
             });
             if (stop_worker) return;
             lock.unlock();
@@ -355,7 +265,6 @@ bool initialize() {
             bool recover;
             {
                 std::lock_guard lifecycle(lifecycle_mutex);
-                if (device_list_pending.exchange(false) && owns_audio_subsystem) enumerate_devices();
                 recover = device_event_pending.exchange(false) ||
                     (resume_reopen_pending && std::chrono::steady_clock::now() >= next_resume_reopen);
                 std::lock_guard pcm(mutex);
@@ -371,17 +280,6 @@ bool initialize() {
                 }
             }
             if (recover) recover_after_resume();
-            if (test_pending.exchange(false)) {
-                std::lock_guard lifecycle(lifecycle_mutex);
-                std::lock_guard pcm(mutex);
-                if (device) {
-                    SDL_LockAudioDevice(device);
-                    test_frames = 28800;
-                    SDL_UnlockAudioDevice(device);
-                    playback_started = true;
-                    SDL_PauseAudioDevice(device, 0);
-                }
-            }
         }
     });
     return true;
@@ -397,8 +295,6 @@ void shutdown() {
     watching_events = false;
     resume_reopen_pending = false;
     device_event_pending = false;
-    test_pending = false;
-    device_list_pending = false;
     close_locked();
     output_consumed.notify_all();
     if (owns_audio_subsystem) SDL_QuitSubSystem(SDL_INIT_AUDIO);
@@ -416,45 +312,20 @@ bool recover_after_resume() {
     detach_device();
     if (!initialize_driver()) {
         use_silent_output();
-
+        std::fprintf(
+            stderr,
+            "TWINE_RESUME audio=reopen_failed error=%s\n",
+            SDL_GetError());
         return false;
     }
     resume_reopen_pending = false;
+    device_event_pending = false;
     status.store(DeviceStatus::Available, std::memory_order_release);
 
     return true;
 }
 
 DeviceStatus device_status() { return status.load(std::memory_order_acquire); }
-
-uint64_t output_revision() { return devices_revision.load(std::memory_order_acquire); }
-OutputDevices output_devices() {
-    std::lock_guard info(devices_mutex);
-    return devices;
-}
-
-bool select_output(const std::string& name) {
-    if (name.size() > 1024 || name.find('\0') != std::string::npos) return false;
-    {
-        std::lock_guard info(devices_mutex);
-        if (devices.selected == name) return true;
-        devices.selected = name;
-        publish_devices();
-    }
-    refresh_outputs();
-    return true;
-}
-
-void refresh_outputs() {
-    device_event_pending.store(true, std::memory_order_release);
-    wake_device.notify_one();
-}
-
-void test_output() {
-    test_volume.store(int(std::clamp(recompui::config::sound::get_main_volume(), 0.0, 100.0)));
-    test_pending = true;
-    wake_device.notify_one();
-}
 
 DeviceStatus service_device_changes(bool resumed) {
     if (resumed) {

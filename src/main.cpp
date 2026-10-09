@@ -33,13 +33,15 @@
 #include "pfs_runtime.hpp"
 #include "audio_host.hpp"
 #include "audio_status_ui.hpp"
-#include "audio_settings.hpp"
 #include "campaign_profile.hpp"
 #include "cheats.hpp"
 #include "aspect_layout.hpp"
+#include "field_of_view.hpp"
+#include "controller_deadzone.hpp"
 #include "hud_layout.hpp"
 #include "input_prompts.hpp"
 #include "modern_input.hpp"
+#include "look_settings.hpp"
 #include "gameplay_input_owner.hpp"
 #include "modern_grapple.hpp"
 #include "world_render_context.hpp"
@@ -81,10 +83,19 @@
 #include "funcs.h"
 #include "local_aot.hpp"
 
+#ifndef TWINE_BUILD_ID
+#define TWINE_BUILD_ID "development"
+#endif
 #ifndef TWINE_VERSION_MAJOR
 #define TWINE_VERSION_MAJOR 0
 #define TWINE_VERSION_MINOR 0
 #define TWINE_VERSION_PATCH 0
+#endif
+#ifndef TWINE_BUILD_PLATFORM
+#define TWINE_BUILD_PLATFORM "unknown"
+#endif
+#ifndef TWINE_DEPENDENCY_ID
+#define TWINE_DEPENDENCY_ID "unknown"
 #endif
 
 extern "C" void recomp_entrypoint(uint8_t* rdram, recomp_context* context);
@@ -98,10 +109,6 @@ namespace {
 constexpr std::u8string_view game_id = u8"twine.n64.us.1.0";
 constexpr uint32_t initial_overlay_staging = 0x800D7050U;
 constexpr uint32_t initial_overlay_staging_size = 0x22000U;
-constexpr char mouse_acceleration_option[] = "mouse_acceleration";
-constexpr char joystick_sensitivity_x_option[] = "joystick_sensitivity_x";
-constexpr char joystick_sensitivity_y_option[] = "joystick_sensitivity_y";
-constexpr char auto_aim_option[] = "auto_aim";
 constexpr size_t modern_input_player_count = 4;
 constexpr uint32_t pause_menu_definition = 0x800BDB1CU;
 constexpr uint32_t frontend_menu_definition = 0x800BD8C4U;
@@ -318,6 +325,8 @@ bool store_modern_actions(
     pending_modern_actions[controller].fetch_or(
         rising & edge_actions,
         std::memory_order_relaxed);
+    (void)((rising & twine::modern_input::action_bit(
+            twine::modern_input::Action::CycleMode)) != 0);
     return (rising & twine::modern_input::action_bit(
         twine::modern_input::Action::ToggleLighting)) != 0;
 }
@@ -336,6 +345,11 @@ void twine_on_init(uint8_t* rdram, recomp_context*) {
 ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
     SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+
+    SDL_SetHintWithPriority(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "0", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE, "0", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_MOUSE_RELATIVE_SPEED_SCALE, "1", SDL_HINT_OVERRIDE);
+    SDL_SetHintWithPriority(SDL_HINT_MOUSE_RELATIVE_SCALING, "0", SDL_HINT_OVERRIDE);
 
     if (SDL_InitSubSystem(
             SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK |
@@ -458,7 +472,9 @@ bool get_input(int controller, uint16_t* buttons, float* x, float* y) {
     twine::sprint::InputPublication sprint_input(controller);
     recompinput::set_right_analog_suppressed(true);
     bool result =
-        recompinput::profiles::get_n64_input(controller, buttons, x, y);
+        recompinput::profiles::get_n64_input(controller, buttons, x, y,
+            gameplay_mapping_active(runtime_rdram.load(std::memory_order_acquire))
+                ? twine::controller::deadzone() : 0.0f);
     recompinput::set_right_analog_suppressed(false);
     const bool input_disabled = recompinput::game_input_disabled();
 
@@ -508,6 +524,7 @@ bool get_input(int controller, uint16_t* buttons, float* x, float* y) {
         ? recompinput::consume_mouse_wheel_delta() : 0;
     uint8_t* input_rdram = runtime_rdram.load(std::memory_order_acquire);
     if (quit_confirmation_active(input_rdram)) {
+        const uint16_t raw_confirmation_buttons = *buttons;
         const bool semantic_accept = modern_input_active(
             controller, recompinput::GameInput::ACCEPT_MENU);
         const bool semantic_back = modern_input_active(
@@ -544,6 +561,7 @@ bool get_input(int controller, uint16_t* buttons, float* x, float* y) {
 
     }
     if (!result || input_disabled) {
+        if (controller == 0) recompinput::clear_mouse_deltas();
         store_modern_input(controller, {});
         clear_modern_actions(controller);
         twine::radial::clear(controller);
@@ -576,6 +594,7 @@ bool get_input(int controller, uint16_t* buttons, float* x, float* y) {
             (*buttons & twine::modern_input::button_start) != 0);
     }
     if (!gameplay_mapping && !twine::radial::active(controller)) {
+        if (controller == 0) recompinput::clear_mouse_deltas();
         bool semantic_accept = modern_input_active(
             controller, recompinput::GameInput::ACCEPT_MENU);
         bool semantic_back = modern_input_active(
@@ -620,19 +639,16 @@ bool get_input(int controller, uint16_t* buttons, float* x, float* y) {
 
     float aim_x = 0.0f;
     float aim_y = 0.0f;
-    recompinput::get_right_analog(controller, &aim_x, &aim_y);
+    recompinput::get_right_analog(controller, &aim_x, &aim_y, twine::controller::deadzone());
     float radial_x = aim_x;
     float radial_y = aim_y;
     if (std::hypot(radial_x, radial_y) < 0.35f) {
         radial_x = *x;
         radial_y = -*y;
     }
-    float mouse_x = 0.0f;
-    float mouse_y = 0.0f;
-    if (controller == 0) {
-        recompinput::get_mouse_deltas(&mouse_x, &mouse_y);
-    }
     const auto equipment = twine::radial::equipment_context(controller);
+    const bool wheel_zooms = equipment.zoom_available && (equipment.scoped ||
+        (*buttons & twine::modern_input::button_l) != 0);
     const bool zoom_in_down = modern_input_active(controller, recompinput::GameInput::ZOOM_IN);
     const bool zoom_out_down = modern_input_active(controller, recompinput::GameInput::ZOOM_OUT);
     const auto scope_zoom = controller >= 0 &&
@@ -658,7 +674,8 @@ bool get_input(int controller, uint16_t* buttons, float* x, float* y) {
         watch_shortcuts,
         (*buttons & twine::modern_input::button_b) != 0,
         radial_x,
-        radial_y);
+        radial_y,
+        wheel_zooms ? 0 : mouse_wheel);
     *buttons &= static_cast<uint16_t>(~radial.consumed_buttons);
     if (radial.consume_xray_binding) {
 
@@ -669,10 +686,10 @@ bool get_input(int controller, uint16_t* buttons, float* x, float* y) {
     const bool zoom_in = scope_zoom.in || (!radial.consume_xray_binding &&
             modern_input_active(
                 controller, recompinput::GameInput::ZOOM_IN)) ||
-        mouse_wheel > 0;
+        (wheel_zooms && mouse_wheel > 0);
     const bool zoom_out = scope_zoom.out || ((watch_shortcuts & 2U) == 0 && modern_input_active(
             controller, recompinput::GameInput::ZOOM_OUT)) ||
-        mouse_wheel < 0;
+        (wheel_zooms && mouse_wheel < 0);
     *buttons = twine::modern_input::route_scoped_dpad(
         *buttons, scope_zoom.owns_vertical || scope_zoom_in || scope_zoom_out,
         zoom_in || zoom_out);
@@ -716,19 +733,14 @@ bool get_input(int controller, uint16_t* buttons, float* x, float* y) {
         return result;
     }
 
-    const bool mouse_acceleration = std::get<bool>(
-        recompui::config::get_general_config().get_option_value(
-            mouse_acceleration_option));
+    const auto look_settings = twine::look::settings();
     const twine::modern_input::State mapped = twine::modern_input::compose(
         *x,
         scope_zoom.forward,
-        aim_x,
-        aim_y,
-        mouse_x,
-        mouse_y,
-        mouse_acceleration,
-        static_cast<float>(std::get<double>(recompui::config::get_general_config().get_option_value(joystick_sensitivity_x_option)) / 100.0),
-        static_cast<float>(std::get<double>(recompui::config::get_general_config().get_option_value(joystick_sensitivity_y_option)) / 100.0));
+        aim_x * (look_settings.stick_x_inverted ? -1.0f : 1.0f),
+        aim_y * (look_settings.stick_y_inverted ? -1.0f : 1.0f),
+        0.0f, 0.0f, false,
+        look_settings.stick_x_sensitivity, look_settings.stick_y_sensitivity);
     twine::modern_input::State effective = mapped;
     if (twine::grapple::active(controller)) {
         effective.forward = 0.0f;
@@ -786,6 +798,15 @@ void configure_modern_controls() {
     recompinput::set_game_input_description(
         GameInput::X_AXIS_NEG,
         "WASD or the left stick provides independent forward and strafe movement.");
+    recompinput::set_game_input_description(
+        GameInput::Y_AXIS_POS,
+        "Move forward on foot; accelerate the snowboard in Cold Reception.");
+    recompinput::set_game_input_description(
+        GameInput::Y_AXIS_NEG,
+        "Move backward on foot; brake the snowboard in Cold Reception.");
+    recompinput::set_game_input_description(
+        GameInput::A,
+        "Cycle weapons. Mouse wheel up/down also selects the next/previous owned weapon, except while using scope zoom.");
     recompinput::set_game_input_description(
         GameInput::C_UP,
         "Space or the south controller button stands, jumps, or climbs.");
@@ -1143,22 +1164,8 @@ int run_application(int argc, char** argv) {
         };
     recomp::config::Config& general_config =
         recompui::config::create_general_tab(general_options);
-    general_config.add_bool_option(
-        mouse_acceleration_option,
-        "Mouse Acceleration",
-        "Increases mouse-look speed with faster mouse movement.",
-        false);
-    general_config.add_number_option(joystick_sensitivity_x_option,
-        "Right Stick Horizontal Sensitivity", "Horizontal speed for right-stick aiming.",
-        0, 200, 5, 0, true, 100);
-    general_config.add_number_option(joystick_sensitivity_y_option,
-        "Right Stick Vertical Sensitivity", "Vertical speed for right-stick aiming.",
-        0, 200, 5, 0, true, 100);
-    general_config.add_bool_option(
-        auto_aim_option,
-        "Auto Aim",
-        "Lets the game pull the reticle toward nearby enemies.",
-        recompui::is_steam_deck());
+    twine::controller::register_deadzone(general_config);
+    twine::look::register_settings(general_config, recompui::is_steam_deck());
     recomp::config::Config& gameplay_config =
         recompui::config::create_config_tab("QOL", twine::qol::config_id, false);
     twine::qol::register_settings(gameplay_config);
@@ -1166,11 +1173,15 @@ int run_application(int argc, char** argv) {
         recompui::config::create_config_tab(
             "Cheats", twine::cheats::config_id, false);
     twine::cheats::register_settings(cheats_config);
-    recompui::config::create_graphics_tab(recompui::config::graphics::tab_name,
-        twine::textures::create_controls, twine::textures::select, twine::textures::available());
+    auto& graphics_config = recompui::config::create_graphics_tab(recompui::config::graphics::tab_name,
+        [](recompui::ContextId context, recompui::Element* parent) {
+            twine::fov::create_controls(context, parent);
+            twine::textures::create_controls(context, parent);
+        }, twine::textures::select, twine::textures::available());
+    twine::fov::register_setting(graphics_config);
     configure_modern_controls();
     recompui::config::create_controls_tab();
-    twine::audio_settings::create();
+    recompui::config::create_sound_tab();
     recompui::config::finalize();
     twine::textures::configure();
     auto& finalized_gameplay_config =
@@ -1224,7 +1235,7 @@ int run_application(int argc, char** argv) {
     if (argc == 2) {
         std::u8string selected_game(game_id);
         const recomp::RomValidationError result =
-            recomp::select_rom(std::filesystem::path(argv[1]), selected_game);
+            recomp::select_rom(std::filesystem::u8path(argv[1]), selected_game);
         if (result != recomp::RomValidationError::Good) {
             std::fprintf(
                 stderr,
@@ -1277,7 +1288,13 @@ int run_application(int argc, char** argv) {
 
         },
         .graphics_task_started_callback = [](uint64_t sequence, uint32_t displaylist) {
-            RT64::beginModernRenderTask(sequence, displaylist);
+            if (!RT64::beginModernRenderTask(sequence, displaylist)) {
+                static unsigned reports = 0;
+                if (reports++ < 8) {
+                    std::fprintf(stderr, "TWINE_RENDER_TASK missing sequence=%llu dl=%08X\n",
+                        static_cast<unsigned long long>(sequence), displaylist);
+                }
+            }
 
         },
         .graphics_task_completed_callback = [](uint64_t sequence, uint32_t displaylist) {
@@ -1306,6 +1323,19 @@ int run_application(int argc, char** argv) {
     return EXIT_SUCCESS;
 }
 
+}
+
+extern "C" void twine_report_grapple_aim(uint8_t* rdram, recomp_context* ctx,
+    uint32_t player, bool valid,
+    const twine::grapple::Vec3& origin, const twine::grapple::Vec3& point,
+    const twine::grapple::Vec3& normal) {
+    (void)rdram;
+    (void)ctx;
+    (void)player;
+    (void)valid;
+    (void)origin;
+    (void)point;
+    (void)normal;
 }
 
 extern "C" uint32_t twine_override_modern_axis(
@@ -1357,6 +1387,16 @@ extern "C" void twine_apply_modern_zoom(
     if (axis != 0.0f) {
         ctx->f0.fl = axis;
     }
+}
+
+extern "C" uint32_t twine_override_modern_speed_action(uint8_t* rdram, recomp_context* ctx) {
+    if (static_cast<uint64_t>(ctx->r4) >= modern_inputs.size() ||
+            (ctx->r5 != 27 && ctx->r5 != 28) || !gameplay_mapping_active(rdram)) {
+        return 0;
+    }
+    ctx->r2 = twine::modern_input::speed_action(static_cast<uint32_t>(ctx->r5),
+        modern_inputs[static_cast<size_t>(ctx->r4)].load().forward) ? 65536 : 0;
+    return 1;
 }
 
 extern "C" void twine_match_portal_aspect(
@@ -1512,19 +1552,25 @@ extern "C" void twine_apply_modern_look(
     gameplay_input_owner.observe(static_cast<unsigned>(player));
     if (twine::modern_input::native_ladder_look_owned(
             TWINE_MEM_HU(0x7C, ctx->r18), TWINE_MEM_BU(0x181, ctx->r17))) {
+        if (player == 0) recompinput::clear_mouse_deltas();
 
         modern_pitch_states[player].initialized = false;
         TWINE_MEM_W(0, 0x800E1A1C) = 0;
         return;
     }
-    const twine::modern_input::State input = modern_inputs[player].load();
+    twine::modern_input::State input = modern_inputs[player].load();
+    const auto look_settings = twine::look::settings();
+    if (player == 0) {
+        float mouse_x = 0.0f, mouse_y = 0.0f;
+        recompinput::get_mouse_deltas(&mouse_x, &mouse_y);
+        if (!recompinput::game_input_disabled() && !twine::radial::active(0) &&
+                !recompui::is_context_capturing_mouse()) {
+            twine::look::apply_mouse(input, mouse_x, mouse_y, look_settings);
+        }
+    }
     fpr zoom{};
     zoom.u32l = static_cast<uint32_t>(TWINE_MEM_W(0X3C, ctx->r17));
     const float look_scale = twine::sniper::look_scale(zoom.fl);
-    TWINE_MEM_B(0X5089 + player * 0XA0, 0X80110000U) =
-        std::get<bool>(
-            recompui::config::get_general_config().get_option_value(
-                auto_aim_option)) ? 1 : 0;
 
     fpr yaw{};
     yaw.fl = twine::modern_input::yaw_delta(input.look_right * look_scale);
@@ -1551,6 +1597,8 @@ extern "C" void twine_apply_modern_look(
 }
 
 extern "C" void twine_begin_gameplay_input_tick(uint8_t* rdram, recomp_context*) {
+    twine::look::sync_auto_aim(rdram);
+    twine_begin_impact_tick();
     gameplay_input_owner.begin(twine::qol::lifecycle_epoch());
     twine::sprint::begin_tick();
     twine::health::begin_tick(rdram);
@@ -1560,6 +1608,7 @@ extern "C" void twine_finish_gameplay_input_tick(uint8_t* rdram, recomp_context*
     gameplay_input_owner.finish();
     const auto pause = pause_menu_context(rdram);
 
+    twine_profile_world_context(gameplay_mapping_active(rdram));
     twine::health::finish_tick(rdram, pause.session && !pause.menu_present);
     twine::objectives::publish(rdram, ctx, pause.session && !pause.menu_present);
     twine::vision_battery::publish(rdram, pause.session && !pause.menu_present);
@@ -1691,7 +1740,7 @@ std::vector<recomp::GameEntry> supported_games = {
     },
 };
 
-int main(int argc, char** argv) {
+static int twine_main(int argc, char** argv) {
     recompui::programconfig::set_program_id(u8"TWINERecompiled");
 
     SDL_SetMainReady();
@@ -1715,6 +1764,29 @@ int main(int argc, char** argv) {
     SDL_Quit();
     return result;
 }
+
+#ifdef _WIN32
+int wmain(int argc, wchar_t** wide_argv) {
+    try {
+
+        std::vector<std::u8string> arguments;
+        arguments.reserve(argc);
+        for (int i = 0; i < argc; ++i)
+            arguments.push_back(std::filesystem::path(wide_argv[i]).u8string());
+        std::vector<char*> argv;
+        argv.reserve(static_cast<size_t>(argc) + 1);
+        for (auto& argument : arguments)
+            argv.push_back(reinterpret_cast<char*>(argument.data()));
+        argv.push_back(nullptr);
+        return twine_main(argc, argv.data());
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "Cannot read Windows launch arguments: %s\n", error.what());
+        return EXIT_FAILURE;
+    }
+}
+#else
+int main(int argc, char** argv) { return twine_main(argc, argv); }
+#endif
 
 twine::state::Bytes twine::state::capture_input(uint8_t*) {
     Writer out; out.u32(2);
@@ -1756,6 +1828,7 @@ std::unique_ptr<twine::state::PreparedOwner> twine::state::prepare_input(std::sp
     auto radial = prepare_radial(in.blob(256)); in.end();
     return prepared_owner([pitch, scopes, attract, opening, movie, closing, radial = std::move(radial)]() mutable noexcept {
         qol::notify_lifecycle(qol::LifecycleEvent::CheckpointRestore);
+        recompinput::clear_mouse_deltas();
         const auto frame = modern_vi_frame.load();
         for (size_t i = 0; i < pitch.size(); ++i) {
             pitch[i].last_frame = frame; modern_pitch_states[i] = pitch[i];

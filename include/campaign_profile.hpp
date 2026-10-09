@@ -9,14 +9,12 @@
 
 namespace twine::campaign {
 
-inline constexpr uint32_t schema_version = 2;
-inline constexpr uint32_t settings_revision = 1;
+inline constexpr uint32_t schema_version = 1;
 inline constexpr size_t payload_size = 0x200;
 
 struct Profile {
     uint64_t generation = 0;
     uint64_t selected_bonuses = 0;
-    uint32_t settings_revision = campaign::settings_revision;
     std::array<uint8_t, payload_size> payload{};
 };
 
@@ -31,8 +29,7 @@ public:
     bool initialize(const std::optional<Profile>& legacy = std::nullopt);
     bool has_profile() const { return profile_.has_value(); }
     const Profile& profile() const { return *profile_; }
-    bool commit(std::span<const uint8_t, payload_size> payload,
-                std::optional<uint32_t> revision = std::nullopt);
+    bool commit(std::span<const uint8_t, payload_size> payload);
     bool set_selected_bonuses(uint64_t selected_bonuses);
     bool reset(std::span<const uint8_t, payload_size> payload);
     bool flush();
@@ -63,7 +60,6 @@ bool set_selected_bonuses(uint64_t value);
 uint64_t generation();
 bool dirty();
 bool runtime_payload_matches(const uint8_t* rdram);
-
-bool restore_state_options(uint8_t* rdram) noexcept;
+void restore_state_options(uint8_t* rdram) noexcept;
 
 }
