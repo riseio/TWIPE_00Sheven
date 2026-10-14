@@ -248,7 +248,7 @@ extern "C" void twine_finish_render_tags(uint8_t* rdram, recomp_context* ctx) tr
         {hook, 0x10000064U}, {extended | G_EX_SETRDRAMEXTENDED_V1, 1},
         {extended | G_EX_SETREFRESHRATE_V1, 30},
 
-        {extended | G_EX_SETNEARCLIPPING_V1, 0},
+        {extended | G_EX_SETNEARCLIPPING_V1, twine::render::native_depth_clipping ? 1U : 0U},
         {extended | G_EX_SETTEXCOORDWRAPPOINT_V1, (1024U << 16) | 1024U},
         {matrix_group, 0}, {0, 0},
         {matrix_group, 0}, {2, 0},

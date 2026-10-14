@@ -30,12 +30,12 @@ public:
     bool update(bool available, bool down, uint64_t epoch) {
         const bool edge = down && !held_;
         held_ = down;
-        if (epoch_ != epoch || !available) {
+        if (epoch_ != epoch) {
             epoch_ = epoch;
             visible_ = false;
         }
-        else if (edge) { visible_ = !visible_; }
-        return visible_;
+        else if (available && edge) { visible_ = !visible_; }
+        return available && visible_;
     }
 };
 

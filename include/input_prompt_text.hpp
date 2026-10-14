@@ -45,6 +45,8 @@ enum class ActionBinding {
     back,
     restart,
     quit,
+    scroll_up,
+    scroll_down,
 };
 
 inline std::string_view trim_prompt_text(std::string_view text) {
@@ -68,6 +70,14 @@ inline ActionBinding classify_action(std::string_view text) {
     for (const unsigned char value : trim_prompt_text(text))
         identity = (identity ^ value) * 1099511628211ULL;
     switch (identity) {
+    case 0x2BD0DC08D3899CE9ULL:
+    case 0xA0D6EE65123CA6C3ULL:
+    case 0x9EEBB312B2222CAEULL:
+        return ActionBinding::scroll_up;
+    case 0xC85F268128AB34F0ULL:
+    case 0x916B6F9D7CBB600AULL:
+    case 0x9C9D082D3EE88A7EULL:
+        return ActionBinding::scroll_down;
     case 0xC16E00A7A8B2FDE2ULL:
     case 0x2CEB11BE2290BB1BULL:
     case 0x09205907B5B56CDAULL:

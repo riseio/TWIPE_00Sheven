@@ -50,7 +50,7 @@ public:
         for (auto& entry : entries_) {
             if (entry.camera != camera || entry.frame != frame) { continue; }
             if (entry.rotation_valid && entry.rotation_frame == frame) { return entry.cut; }
-            if (!entry.cut && entry.controller == 0 && entry.rotation_valid && entry.rotation_frame + 1 == frame) {
+            if (!entry.cut && entry.rotation_valid && entry.rotation_frame + 1 == frame) {
 
                 double trace = 0;
                 for (size_t i = 0; i < rotation.size(); ++i) {

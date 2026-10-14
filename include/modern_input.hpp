@@ -44,8 +44,11 @@ inline bool gameplay_mapping_active(
     return gameplay_overlay_active(overlay) && demo_mode == 0 && native_control_owned;
 }
 
-constexpr bool native_ladder_look_owned(uint16_t mode, uint8_t ladder_phase) {
-    return mode == 1 && (ladder_phase == 2 || ladder_phase == 3);
+constexpr bool native_ladder_look_owned(
+    uint16_t mode, uint8_t ladder_phase, bool animation_busy = false
+) {
+    return mode == 1 && (ladder_phase == 2 || ladder_phase == 3 ||
+        (ladder_phase == 1 && animation_busy));
 }
 
 enum class WeaponCategory : uint8_t {

@@ -52,6 +52,7 @@ extern "C" {
 #endif
 
 uint32_t twine_camera_query_active(recomp_context* ctx);
+void twine_crouch_blend_height(uint8_t* rdram, uint32_t actor);
 uint32_t twine_texture_conversion_query(const recomp_context* context);
 uint32_t twine_capture_camera_query(uint8_t* rdram, recomp_context* ctx);
 uint32_t twine_text_query_active(recomp_context* ctx);
@@ -120,6 +121,8 @@ void twine_complete_instant_pause_movie(uint8_t* rdram, recomp_context* ctx);
 void twine_complete_instant_pause_close_status(
     uint8_t* rdram, recomp_context* ctx, uint32_t status);
 void twine_finish_instant_pause_close(uint8_t* rdram, recomp_context* ctx);
+int twine_override_menu_scroll(uint8_t* rdram, recomp_context* ctx);
+void twine_prepare_controller_feedback(uint8_t* rdram, recomp_context* ctx);
 void twine_begin_input_prompt_frame(uint8_t* rdram, recomp_context* ctx);
 void twine_finish_input_prompt_frame(uint8_t* rdram, recomp_context* ctx);
 void twine_capture_render_task(uint8_t* rdram, recomp_context* ctx);
@@ -135,6 +138,11 @@ uint32_t twine_override_modern_axis(uint8_t* rdram, recomp_context* ctx);
 void twine_guided_target_enabled(uint8_t* rdram, recomp_context* ctx);
 void twine_apply_modern_zoom(uint8_t* rdram, recomp_context* ctx);
 void twine_apply_modern_look(uint8_t* rdram, recomp_context* ctx);
+uint32_t twine_auto_aim_active(uint8_t* rdram, uint32_t player);
+uint32_t twine_auto_aim_range(uint8_t* rdram, uint32_t player, uint32_t native_range);
+void twine_adjust_auto_aim_window(uint8_t* rdram, recomp_context* ctx);
+void twine_commit_native_auto_aim(uint32_t player, uint32_t enabled);
+void twine_prepare_bomb_timer(uint8_t* rdram, recomp_context* ctx);
 void twine_begin_gameplay_input_tick(uint8_t* rdram, recomp_context* ctx);
 void twine_sprint_observe_interaction(uint8_t* rdram, recomp_context* ctx);
 void twine_sprint_apply(uint8_t* rdram, recomp_context* ctx);
@@ -151,6 +159,7 @@ uint32_t twine_weapon_pickup_magazine(uint32_t item, uint32_t capacity);
 void twine_laser_ammo_cost(uint8_t* rdram, recomp_context* ctx);
 void twine_reload_animation_step(uint8_t* rdram, recomp_context* ctx);
 void twine_ladder_jump(uint8_t* rdram, recomp_context* ctx);
+void twine_ladder_exit_pose(uint8_t* rdram, recomp_context* ctx);
 uint32_t twine_npc_projectile_policy(uint8_t* rdram, uint32_t actor, uint32_t projectile);
 void twine_finish_gameplay_input_tick(uint8_t* rdram, recomp_context* ctx);
 void twine_filter_sniper_idle_sway(uint8_t* rdram, recomp_context* ctx);
@@ -175,6 +184,7 @@ void twine_sync_cheats(uint8_t* rdram, recomp_context* ctx);
 void twine_restore_cheats(uint8_t* rdram, recomp_context* ctx);
 void twine_apply_civilian_health(uint8_t* rdram, recomp_context* ctx);
 uint32_t twine_npc_is_protected(uint8_t* rdram, uint32_t actor);
+uint32_t twine_keep_corpse(uint8_t* rdram, uint32_t actor);
 uint32_t twine_npc_filter_damage(uint8_t* rdram, uint32_t actor);
 uint32_t twine_should_skip_fall_damage(uint8_t* rdram, recomp_context* ctx);
 uint32_t twine_override_modern_speed_action(uint8_t* rdram, recomp_context* ctx);

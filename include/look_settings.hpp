@@ -13,10 +13,18 @@ struct Settings {
     bool auto_aim = false;
     float stick_x_sensitivity = 1.0f;
     float stick_y_sensitivity = 1.0f;
+    bool reduced_auto_aim_area = false;
 };
 void register_settings(recomp::config::Config& config, bool auto_aim_default);
 Settings settings();
 void sync_auto_aim(uint8_t* rdram);
+void update_ui();
+inline void apply_gyro(modern_input::State& state, float pitch_degrees, float yaw_degrees,
+        const Settings& options) {
+
+    state.look_right -= yaw_degrees / 3.6f * (options.stick_x_inverted ? -1.0f : 1.0f);
+    state.look_up += pitch_degrees / 3.6f * (options.stick_y_inverted ? -1.0f : 1.0f);
+}
 inline void apply_mouse(modern_input::State& state, float x, float y, const Settings& options) {
     const float gain = modern_input::mouse_gain(x, y, options.mouse_acceleration);
     state.look_right += x * gain * (options.mouse_x_inverted ? -1.0f : 1.0f);

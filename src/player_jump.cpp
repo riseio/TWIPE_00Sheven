@@ -3,6 +3,14 @@
 
 extern "C" void twine_native_ladder_launch(uint8_t*, recomp_context*);
 
+extern "C" void twine_ladder_exit_pose(uint8_t* rdram, recomp_context* ctx) {
+    const uint32_t actor = uint32_t(ctx->r18);
+    if (!twine::grapple::rdram_range_valid(actor, 0x80)) return;
+
+    TWINE_MEM_W(0x3C, actor) = 0;
+    TWINE_MEM_W(0, 0x800E1A1C) = 0;
+}
+
 extern "C" void twine_ladder_jump(uint8_t* rdram, recomp_context* ctx) {
     const uint32_t inventory = uint32_t(ctx->r17);
     const uint32_t actor = uint32_t(ctx->r18);

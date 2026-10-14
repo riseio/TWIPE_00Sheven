@@ -10,6 +10,7 @@ namespace twine::rom {
 struct WeaponDefaults { float damage = 0; uint8_t magazine = 0, reload = 0; };
 struct AmmoDefaults { uint16_t pickup = 0, maximum = 0; };
 struct Metadata {
+    float auto_aim_range = 0;
     std::array<std::string, static_cast<size_t>(Text::count)> text{};
     std::array<WeaponDefaults, 36> weapons{};
     std::array<AmmoDefaults, 17> ammo{};

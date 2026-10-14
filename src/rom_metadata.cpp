@@ -27,6 +27,9 @@ public:
 Metadata read_metadata(std::span<const uint8_t> validated_rom) {
     Reader source(validated_rom);
     Metadata result;
+    result.auto_aim_range = std::bit_cast<float>(source.word(0x800C7C9CU));
+    if (!std::isfinite(result.auto_aim_range) || result.auto_aim_range <= 0)
+        throw std::runtime_error("Invalid auto-aim range metadata");
 
     constexpr std::array<std::array<uint32_t, 2>, static_cast<size_t>(Text::count)> spans{{
         {0x1499926U, 17U},

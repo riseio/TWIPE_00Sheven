@@ -52,6 +52,7 @@
 #include "modern_textures.hpp"
 #include "objectives_overlay.hpp"
 #include "steam_deck_grips.hpp"
+#include "steam_deck_motion.hpp"
 #include "radial_menu.hpp"
 #include "resume_recovery.hpp"
 #include "radial_runtime.hpp"
@@ -450,6 +451,7 @@ void update_gfx(void*) {
         twine::deck_grips::recover_after_resume();
     }
     twine::input_prompts::update_ui();
+    twine::look::update_ui();
     twine::radial::update_ui();
     twine::objectives::update_ui();
     twine::vision_battery::update_ui();
@@ -561,6 +563,7 @@ bool get_input(int controller, uint16_t* buttons, float* x, float* y) {
 
     }
     if (!result || input_disabled) {
+        recompinput::clear_gyro_deltas(controller);
         if (controller == 0) recompinput::clear_mouse_deltas();
         store_modern_input(controller, {});
         clear_modern_actions(controller);
@@ -594,6 +597,7 @@ bool get_input(int controller, uint16_t* buttons, float* x, float* y) {
             (*buttons & twine::modern_input::button_start) != 0);
     }
     if (!gameplay_mapping && !twine::radial::active(controller)) {
+        recompinput::clear_gyro_deltas(controller);
         if (controller == 0) recompinput::clear_mouse_deltas();
         bool semantic_accept = modern_input_active(
             controller, recompinput::GameInput::ACCEPT_MENU);
@@ -833,6 +837,20 @@ void configure_modern_controls() {
         "Toggle a live objectives panel during gameplay without pausing.");
 
     twine::keyboard::configure_defaults();
+    recompinput::set_default_mapping_for_keyboard(
+        GameInput::SCROLL_UP, {InputField::keyboard(SDL_SCANCODE_PAGEUP)});
+    recompinput::set_default_mapping_for_keyboard(
+        GameInput::SCROLL_DOWN, {InputField::keyboard(SDL_SCANCODE_PAGEDOWN)});
+    recompinput::set_default_mapping_for_controller(GameInput::SCROLL_UP, {
+        InputField::controller_analog(SDL_CONTROLLER_AXIS_TRIGGERLEFT),
+        InputField::controller_analog(SDL_CONTROLLER_AXIS_RIGHTY, false)});
+    recompinput::set_default_mapping_for_controller(GameInput::SCROLL_DOWN, {
+        InputField::controller_analog(SDL_CONTROLLER_AXIS_TRIGGERRIGHT),
+        InputField::controller_analog(SDL_CONTROLLER_AXIS_RIGHTY)});
+    recompinput::set_game_input_description(GameInput::SCROLL_UP,
+        "Scroll briefing and debriefing objectives up. Defaults to Page Up, left trigger or right stick up.");
+    recompinput::set_game_input_description(GameInput::SCROLL_DOWN,
+        "Scroll briefing and debriefing objectives down. Defaults to Page Down, right trigger or right stick down.");
     recompinput::set_default_mapping_for_controller(
         GameInput::SAVE_STATE, {InputField::controller_digital(SDL_CONTROLLER_BUTTON_PADDLE4)});
     recompinput::set_default_mapping_for_controller(
@@ -1124,6 +1142,7 @@ int run_application(int argc, char** argv) {
 
     recompui::config::GeneralTabOptions general_options{};
     general_options.has_rumble_strength = true;
+    general_options.has_gyro_sensitivity = true;
     general_options.has_mouse_sensitivity = true;
     general_options.extra_contents =
         [](recompui::ContextId context, recompui::Element* parent) {
@@ -1164,6 +1183,8 @@ int run_application(int argc, char** argv) {
         };
     recomp::config::Config& general_config =
         recompui::config::create_general_tab(general_options);
+
+    general_config.update_option_hidden(recompui::config::general::options::gyro_sensitivity, true);
     twine::controller::register_deadzone(general_config);
     twine::look::register_settings(general_config, recompui::is_steam_deck());
     recomp::config::Config& gameplay_config =
@@ -1525,6 +1546,26 @@ extern "C" void twine_finish_instant_pause_close(
 
 }
 
+extern "C" int twine_override_menu_scroll(uint8_t* rdram, recomp_context* ctx) {
+    const uint32_t action = static_cast<uint32_t>(ctx->r4);
+    if ((action != 0x25U && action != 0x26U) || current_native_menu_page(rdram) < 0) {
+        return 0;
+    }
+    ctx->r2 = 0;
+    if (!recompinput::game_input_disabled() && !recompinput::all_input_disabled()) {
+        const auto input = action == 0x25U
+            ? recompinput::GameInput::SCROLL_UP : recompinput::GameInput::SCROLL_DOWN;
+        const bool any_player = TWINE_MEM_BU(0, 0x800BD690U) != 0;
+        const unsigned selected = TWINE_MEM_BU(0, 0x800BD691U);
+        for (unsigned player = 0; player < 4; ++player) {
+            if ((any_player || player == selected) && modern_input_active(player, input)) {
+                ctx->r2 = 1;
+            }
+        }
+    }
+    return 1;
+}
+
 extern "C" void twine_begin_ui_aspect(uint8_t* rdram, recomp_context* ctx) {
     const bool frontend = current_native_menu_page(rdram) >= 0;
     const bool mission = twine::hud::mission_ui_context(
@@ -1550,16 +1591,22 @@ extern "C" void twine_apply_modern_look(
 
     const size_t player = static_cast<size_t>(ctx->r19);
     gameplay_input_owner.observe(static_cast<unsigned>(player));
+    const uint32_t ladder_item = TWINE_MEM_W(0x68, ctx->r18);
+    const bool ladder_animation_busy = valid_rdram_address(ladder_item, 0x10U) &&
+        (TWINE_MEM_HU(0x0C, ladder_item) & 0x40U) != 0;
     if (twine::modern_input::native_ladder_look_owned(
-            TWINE_MEM_HU(0x7C, ctx->r18), TWINE_MEM_BU(0x181, ctx->r17))) {
+            TWINE_MEM_HU(0x7C, ctx->r18), TWINE_MEM_BU(0x181, ctx->r17),
+            ladder_animation_busy)) {
+        recompinput::clear_gyro_deltas(static_cast<int>(player));
         if (player == 0) recompinput::clear_mouse_deltas();
 
         modern_pitch_states[player].initialized = false;
-        TWINE_MEM_W(0, 0x800E1A1C) = 0;
+        twine_ladder_exit_pose(rdram, ctx);
         return;
     }
     twine::modern_input::State input = modern_inputs[player].load();
     const auto look_settings = twine::look::settings();
+    recompinput::clear_gyro_deltas(static_cast<int>(player));
     if (player == 0) {
         float mouse_x = 0.0f, mouse_y = 0.0f;
         recompinput::get_mouse_deltas(&mouse_x, &mouse_y);
@@ -1752,12 +1799,14 @@ static int twine_main(int argc, char** argv) {
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE, "1");
     int result = EXIT_FAILURE;
     try {
+        twine::deck_motion::initialize();
         result = run_application(argc, argv);
     }
     catch (const std::exception& exception) {
         std::fprintf(stderr, "Fatal error: %s\n", exception.what());
     }
 
+    twine::deck_motion::shutdown();
     twine::audio_host::shutdown();
 
     twine::campaign::shutdown();
@@ -1829,6 +1878,7 @@ std::unique_ptr<twine::state::PreparedOwner> twine::state::prepare_input(std::sp
     return prepared_owner([pitch, scopes, attract, opening, movie, closing, radial = std::move(radial)]() mutable noexcept {
         qol::notify_lifecycle(qol::LifecycleEvent::CheckpointRestore);
         recompinput::clear_mouse_deltas();
+        for (int player = 0; player < 4; ++player) recompinput::clear_gyro_deltas(player);
         const auto frame = modern_vi_frame.load();
         for (size_t i = 0; i < pitch.size(); ++i) {
             pitch[i].last_frame = frame; modern_pitch_states[i] = pitch[i];

@@ -1,4 +1,6 @@
 #include "steam_deck_grips.hpp"
+#include "steam_deck_motion.hpp"
+#include "twine_qol.hpp"
 
 #ifdef __linux__
 #include <cerrno>
@@ -10,6 +12,7 @@
 #include <unistd.h>
 
 #include <SDL.h>
+#include "recompinput/input_state.h"
 
 #include <array>
 #include <atomic>
@@ -29,6 +32,8 @@ std::array<int, twine::deck_grips::raw_reader_capacity> raw_fds = [] {
     return result;
 }();
 std::array<std::string, twine::deck_grips::raw_reader_capacity> raw_paths{};
+std::array<int, twine::deck_grips::raw_reader_capacity> raw_device_indices{};
+int motion_reader = -1;
 struct RawHeldState {
     bool a = false;
     bool b = false;
@@ -44,6 +49,39 @@ auto next_controller_scan = std::chrono::steady_clock::time_point{};
 int32_t deck_controller_instance = -1;
 bool unavailable_reported = false;
 bool raw_reported = false;
+int32_t motion_controller_instance = -1;
+auto next_motion_scan = std::chrono::steady_clock::time_point{};
+
+int32_t motion_controller() {
+    const auto now = std::chrono::steady_clock::now();
+    if (now < next_motion_scan) { return motion_controller_instance; }
+    next_motion_scan = now + std::chrono::seconds(2);
+    motion_controller_instance = -1;
+    for (int device = 0; device < SDL_NumJoysticks(); ++device) {
+
+        if (SDL_JoystickGetDeviceVendor(device) == 0x28DE &&
+                SDL_JoystickGetDeviceProduct(device) == 0x11FF) {
+            motion_controller_instance = SDL_JoystickGetDeviceInstanceID(device);
+            break;
+        }
+    }
+    return motion_controller_instance;
+}
+
+bool publish_motion(int32_t controller, const uint8_t* report, size_t size) {
+    twine::deck_motion::Sample sample;
+    if (controller < 0 || !twine::deck_motion::decode(report, size, sample)) { return false; }
+    SDL_ControllerSensorEvent event{};
+    event.which = controller;
+    event.timestamp_us = sample.timestamp_us;
+    event.sensor = SDL_SENSOR_ACCEL;
+    std::copy(sample.acceleration.begin(), sample.acceleration.end(), event.data);
+    recompinput::update_controller_sensor(event, true);
+    event.sensor = SDL_SENSOR_GYRO;
+    std::copy(sample.angular_velocity.begin(), sample.angular_velocity.end(), event.data);
+    recompinput::update_controller_sensor(event, true);
+    return true;
+}
 
 void close_input(int& fd) {
     if (fd >= 0) {
@@ -62,6 +100,10 @@ bool has_raw_reader() {
 }
 
 void close_raw(size_t index) {
+    if (motion_reader == int(index)) {
+        motion_reader = -1;
+        twine::deck_motion::reset_source();
+    }
     close_input(raw_fds[index]);
     raw_paths[index].clear();
     raw_held_states[index] = {};
@@ -73,7 +115,7 @@ void close_raw(size_t index) {
 
 void open_deck() {
     const auto now = std::chrono::steady_clock::now();
-    if (event_fd >= 0 || has_raw_reader() || now < next_scan) {
+    if ((event_fd >= 0 && has_raw_reader()) || now < next_scan) {
         return;
     }
     next_scan = now + std::chrono::seconds(2);
@@ -120,7 +162,7 @@ void open_deck() {
             close(fd);
         }
     }
-    if (event_fd < 0 && !has_raw_reader()) {
+    if (!has_raw_reader()) {
         size_t raw_count = 0;
         for (int index = 0; index < 32; ++index) {
             const std::string path = "/dev/hidraw" + std::to_string(index);
@@ -136,6 +178,7 @@ void open_deck() {
                     info.vendor == valve_vendor && info.product == steam_deck_product) {
                 raw_fds[raw_count] = fd;
                 raw_paths[raw_count] = path;
+                raw_device_indices[raw_count] = index;
                 ++raw_count;
                 unavailable_reported = false;
                 if (raw_count == raw_fds.size()) {
@@ -162,6 +205,10 @@ void open_deck() {
 twine::deck_grips::Edges twine::deck_grips::poll() {
 #ifdef __linux__
     open_deck();
+    const int32_t motion_instance = motion_controller();
+    const bool motion_enabled = motion_instance >= 0 &&
+        twine::qol::settings().gyro == twine::qol::GyroAiming::On;
+    bool motion_seen = false;
     Edges result{};
     if (event_fd >= 0) {
         input_event event{};
@@ -196,6 +243,9 @@ twine::deck_grips::Edges twine::deck_grips::poll() {
             const ssize_t size = read(
                 raw_fds[index], report.data(), report.size());
             if (size > 0) {
+                if (motion_reader < 0 && is_deck_report(report.data(), static_cast<size_t>(size))) {
+                    motion_reader = int(index);
+                }
                 if (is_deck_report(report.data(), static_cast<size_t>(size)) &&
                         !raw_reported) {
                     raw_reported = true;
@@ -203,6 +253,9 @@ twine::deck_grips::Edges twine::deck_grips::poll() {
 
                 }
                 RawHeldState &held = raw_held_states[index];
+                if (motion_enabled && motion_reader == int(index)) {
+                    motion_seen |= publish_motion(motion_instance, report.data(), static_cast<size_t>(size));
+                }
                 const Edges edges = parse_report(
                     report.data(),
                     static_cast<size_t>(size),
@@ -233,6 +286,8 @@ twine::deck_grips::Edges twine::deck_grips::poll() {
             break;
         }
     }
+    twine::deck_motion::set_source(motion_reader < 0 ? -1 : raw_device_indices[motion_reader],
+        motion_enabled, motion_seen);
     if (event_fd >= 0 && lower_evdev) {
         result.lower_available = true; result.l5_held |= event_l5; result.r5_held |= event_r5;
     }
@@ -310,6 +365,8 @@ void twine::deck_grips::recover_after_resume() {
     deck_controller_instance = -1;
     next_scan = {};
     next_controller_scan = {};
+    next_motion_scan = {};
+    motion_controller_instance = -1;
     unavailable_reported = false;
     raw_reported = false;
 

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(TWINERecompiled VERSION 0.1.82 LANGUAGES C CXX)
+project(TWINERecompiled VERSION 0.1.92 LANGUAGES C CXX)
 file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/twine-version.txt"
     CONTENT "${PROJECT_VERSION}\n")
 execute_process(
@@ -285,6 +285,8 @@ set(TWINE_RUNTIME_SOURCES
     src/audio_status_ui.cpp
     src/resume_recovery.cpp
     src/steam_deck_grips.cpp
+    src/steam_deck_motion.cpp
+    src/controller_feedback.cpp
     src/twine_qol.cpp
     src/field_of_view.cpp
     src/field_of_view_ui.cpp
@@ -320,8 +322,10 @@ set(TWINE_RUNTIME_SOURCES
     src/guided_weapon.cpp
     src/civilian_health.cpp
     src/npc_protection.cpp
+    src/corpse_persistence.cpp
     src/sprint.cpp
     src/health_regeneration.cpp
+    src/player_animation.cpp
     src/weapon_tuning.cpp
     src/weapon_modes.cpp
     src/player_jump.cpp

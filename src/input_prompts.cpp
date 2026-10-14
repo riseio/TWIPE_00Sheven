@@ -49,6 +49,8 @@ enum class PromptInput : uint8_t {
     none,
     a,
     b,
+    scroll_up,
+    scroll_down,
 };
 
 struct Binding {
@@ -701,6 +703,12 @@ Binding prompt_binding(PromptInput input) {
         break;
     case PromptInput::none:
         return {};
+    case PromptInput::scroll_up:
+        game_input = GameInput::SCROLL_UP;
+        break;
+    case PromptInput::scroll_down:
+        game_input = GameInput::SCROLL_DOWN;
+        break;
     }
     return primary_binding(state.snapshot, game_input);
 }
@@ -948,6 +956,10 @@ PromptInput action_binding(
         twine::input_prompts::classify_action(text),
         restart_quit_pair);
     switch (action) {
+    case twine::input_prompts::ActionBinding::scroll_up:
+        return PromptInput::scroll_up;
+    case twine::input_prompts::ActionBinding::scroll_down:
+        return PromptInput::scroll_down;
     case twine::input_prompts::ActionBinding::back:
         return PromptInput::b;
     case twine::input_prompts::ActionBinding::accept:

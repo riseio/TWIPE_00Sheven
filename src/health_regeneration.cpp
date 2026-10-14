@@ -10,6 +10,7 @@
 namespace twine::health {
 namespace {
 Recovery recovery;
+constexpr uint32_t recovery_delay_ticks = 10 * 30;
 bool range(uint32_t address, uint32_t size) {
     return !(address & 3U) && address >= 0x80000000U &&
         uint64_t(address) + size <= 0x80800000ULL;
@@ -54,15 +55,15 @@ void finish_tick(uint8_t* rdram, bool gameplay) {
     float health = value(rdram, actor + 0x74);
     const float armour = value(rdram, inventory + 0x60);
 
-    const float maximum = value(rdram, inventory + 0x68);
-    if (!std::isfinite(health) || !std::isfinite(armour) || !std::isfinite(maximum) ||
-            health <= 0 || maximum <= 0 || TWINE_MEM_HU(0x7A, actor) == 0) {
+    constexpr float maximum = 100.0f;
+    if (!std::isfinite(health) || !std::isfinite(armour) ||
+            health <= 0 || TWINE_MEM_HU(0x7A, actor) == 0) {
         recovery = {};
         return;
     }
     if (recovery.damaged || health < recovery.health || armour < recovery.armour) {
         recovery.quiet_ticks = 0;
-    } else if (recovery.quiet_ticks < 150) {
+    } else if (recovery.quiet_ticks < recovery_delay_ticks) {
         ++recovery.quiet_ticks;
     } else if (health < maximum) {
         health = std::min(maximum, health + maximum / 300.0f);
@@ -89,7 +90,8 @@ std::unique_ptr<twine::state::PreparedOwner> twine::state::prepare_health(std::s
     health::Recovery r;
     in.fields(r.actor, r.inventory, r.epoch, r.health, r.armour, r.quiet_ticks, r.damaged); in.end();
     if ((r.actor && !guest_range(r.actor, 0x84)) || (r.inventory && !guest_range(r.inventory, 0x184)) ||
-        !std::isfinite(r.health) || !std::isfinite(r.armour) || r.quiet_ticks > 150)
+        !std::isfinite(r.health) || !std::isfinite(r.armour) ||
+        r.quiet_ticks > health::recovery_delay_ticks)
         throw std::runtime_error("Invalid health recovery state");
     return prepared_owner([r]() mutable noexcept { r.epoch = qol::lifecycle_epoch(); health::recovery = r; });
 }

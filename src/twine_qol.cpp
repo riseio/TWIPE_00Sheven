@@ -14,7 +14,7 @@
 namespace twine::qol {
 namespace {
 
-std::array<std::atomic<uint8_t>, 12> setting_values{};
+std::array<std::atomic<uint8_t>, 15> setting_values{};
 std::atomic<uint64_t> lifecycle{1};
 std::atomic<uint64_t> inventory_lifecycle{1};
 
@@ -94,6 +94,14 @@ void add_setting(
 
 void register_settings(recomp::config::Config& config) {
     add_setting(
+        config, 14, keep_corpses_key, "Keep Corpses",
+        "Stop ordinary defeated characters from fading away. Off restores fading. Mission cleanup and scripted removals are unchanged. Single-player only.",
+        "off", "Off", "on", "On");
+    add_setting(
+        config, 13, extended_bomb_timer_key, "Longer Masquerade Bomb Timer",
+        "Allow 30 seconds to escape the bomb in Masquerade. Off restores the original countdown. Applies when the bomb timer starts.",
+        "off", "Off", "on", "On", 1U);
+    add_setting(
         config, 11, impact_effects_key, "Impact Effects",
         "Enhanced adds brief blood puffs on character hits and dust puffs on solid surfaces.",
         "original", "Original", "enhanced", "Enhanced",
@@ -134,7 +142,7 @@ void register_settings(recomp::config::Config& config) {
         "original", "Original", "double", "Double");
     add_setting(
         config, 9, health_regeneration_key, "Regenerating Health",
-        "Recover 10% of maximum health per second after five seconds without damage. Armour does not regenerate. Single-player only.",
+        "Recover 10% of maximum health per second after ten seconds without damage. Armour does not regenerate. Single-player only.",
         "off", "Off", "on", "On");
     add_setting(
         config, 4, fall_damage_key, "Legacy Fall Damage",
@@ -182,6 +190,10 @@ Settings settings() {
         load_mode<HealthRegenerationMode>(9),
         load_mode<WeaponModeMemory>(10),
         load_mode<ImpactEffects>(11),
+
+        GyroAiming::Off,
+        load_mode<ExtendedBombTimer>(13),
+        load_mode<KeepCorpses>(14),
     };
 }
 
@@ -208,6 +220,13 @@ uint64_t inventory_epoch() {
     return inventory_lifecycle.load(std::memory_order_acquire);
 }
 
+}
+
+extern "C" void twine_prepare_bomb_timer(uint8_t*, recomp_context* ctx) {
+
+    if (twine::qol::settings().bomb_timer == twine::qol::ExtendedBombTimer::On) {
+        ctx->r2 = 30 * 30;
+    }
 }
 
 extern "C" void twine_invalidate_transient_state(

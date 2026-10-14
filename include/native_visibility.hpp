@@ -1,6 +1,7 @@
 #pragma once
 
 #include "native_render_matrix.hpp"
+#include "native_clip_policy.hpp"
 #include <algorithm>
 #include <limits>
 
@@ -46,6 +47,7 @@ struct VisibilityRange {
 
 class VisibilitySweep {
     std::array<std::array<double, 16>, 3> clip{};
+    size_t controlCount = 3;
     std::array<VisibilityRange, 3> eye{};
     VisibilityRect viewport{};
     VisibilityViewport mapping{};
@@ -77,6 +79,7 @@ public:
                 }
             }
         }
+        if (clip[0] == clip[1] && clip[1] == clip[2]) controlCount = 1;
 
         std::array<VisibilityRange, 16> v;
         for (size_t i = 0; i < 16; ++i) { v[i] = {previousView[i], currentView[i]}; }
@@ -127,11 +130,15 @@ public:
         const double left = (parent.left - cx) / sx, right = (parent.right - cx) / sx;
         const double top = (cy - parent.top) / sy, bottom = (cy - parent.bottom) / sy;
 
-        for (const std::array<double, 4> plane : {
+        const std::array<std::array<double, 4>, 7> planes{{
                 std::array<double, 4>{1, 0, 0, -left}, {-1, 0, 0, right},
-                {0, 1, 0, -bottom}, {0, -1, 0, top}, {0, 0, 1, 1}, {0, 0, -1, 1}}) {
+                {0, 1, 0, -bottom}, {0, -1, 0, top}, {0, 0, 0, 1},
+                {0, 0, 1, 1}, {0, 0, -1, 1}}};
+        for (size_t p = 0; p < (native_depth_clipping ? 7 : 5); ++p) {
+            const auto& plane = planes[p];
             double maximum = -std::numeric_limits<double>::infinity();
-            for (const auto& control : clip) {
+            for (size_t n = 0; n < controlCount; ++n) {
+                const auto& control = clip[n];
                 double upper = 0, magnitude = 1;
                 for (size_t row = 0; row < 4; ++row) {
                     double coefficient = 0;
@@ -155,7 +162,8 @@ public:
     double radiusPixelsMaximum(const std::array<float, 3>& previous,
             const std::array<float, 3>& current, float radius) const {
         double minimumW = std::numeric_limits<double>::infinity();
-        for (const auto& control : clip) {
+        for (size_t n = 0; n < controlCount; ++n) {
+            const auto& control = clip[n];
             VisibilityRange w(control[15]);
             for (size_t row = 0; row < 3; ++row) {
                 w = w + VisibilityRange(double(previous[row]) * 64, double(current[row]) * 64) *
@@ -169,36 +177,104 @@ public:
     VisibilityRect triangle(const std::array<std::array<float, 3>, 3>& vertices,
             VisibilityRect parent) const {
         parent = parent.intersect(viewport);
-        VisibilityRect result{1, 0, 1, 0};
+        if (parent.empty()) { return parent; }
+        struct Point { double x, y; };
+
+        std::array<Point, 9> points{};
+        size_t count = 0;
+        double marginX = 0, marginY = 0;
         bool crossingEye = false, anyInFront = false;
+        unsigned outside = 15;
         for (const auto& vertex : vertices) {
-            std::array<VisibilityRange, 4> position;
-            for (size_t c = 0; c < 4; ++c) {
-                std::array<double, 3> control{};
-                double magnitude = 1;
-                for (size_t n = 0; n < 3; ++n) {
-                    control[n] = clip[n][12+c];
-                    magnitude += std::abs(control[n]);
+            for (size_t n = 0; n < controlCount; ++n) {
+                const auto& control = clip[n];
+                std::array<double, 4> center{}, error{};
+                for (size_t c : {0U, 1U, 3U}) {
+                    double value = control[12+c], magnitude = 1 + std::abs(value);
                     for (size_t r = 0; r < 3; ++r) {
-                        const double term = double(vertex[r])*64*clip[n][r*4+c];
-                        control[n] += term; magnitude += std::abs(term);
+                        const double term = double(vertex[r])*64*control[r*4+c];
+                        value += term; magnitude += std::abs(term);
                     }
+                    error[c] = magnitude * 32 * std::numeric_limits<float>::epsilon();
+                    center[c] = value;
                 }
+                const double left = mapping.offsetX-parent.left, right = parent.right-mapping.offsetX;
+                const double top = mapping.offsetY-parent.top, bottom = parent.bottom-mapping.offsetY;
+                const double x = center[0]*mapping.scaleX, y = -center[1]*mapping.scaleY, w = center[3];
+                const double ex = error[0]*mapping.scaleX, ey = error[1]*mapping.scaleY, ew = error[3];
+                unsigned code = 0;
+                if (x+left*w+ex+std::abs(left)*ew < 0) code |= 1;
+                if (-x+right*w+ex+std::abs(right)*ew < 0) code |= 2;
+                if (y+top*w+ey+std::abs(top)*ew < 0) code |= 4;
+                if (-y+bottom*w+ey+std::abs(bottom)*ew < 0) code |= 8;
+                outside &= code;
+                anyInFront |= w+ew > 0;
+                if (w-ew <= 0) { crossingEye = true; continue; }
+                const double px = x/w, py = y/w;
 
-                const double error = magnitude * 32 * std::numeric_limits<float>::epsilon();
-                position[c] = {*std::min_element(control.begin(), control.end())-error,
-                    *std::max_element(control.begin(), control.end())+error};
+                marginX = std::max(marginX, (ex+std::abs(px)*ew)/(w-ew));
+                marginY = std::max(marginY, (ey+std::abs(py)*ew)/(w-ew));
+                points[count++] = {mapping.offsetX+px, mapping.offsetY+py};
             }
-            anyInFront |= position[3].high > 0;
-            if (position[3].low <= 0) { crossingEye = true; continue; }
-            const auto x = position[0]/position[3], y = position[1]/position[3];
-            const double cx=mapping.offsetX, cy=mapping.offsetY;
-            const double sx=mapping.scaleX, sy=mapping.scaleY;
-            result.include({cx+x.low*sx, cx+x.high*sx, cy-y.high*sy, cy-y.low*sy});
         }
-        if (!anyInFront) { return {1, 0, 1, 0}; }
+        if (!anyInFront || outside) { return {1, 0, 1, 0}; }
 
-        return crossingEye ? parent : result.intersect(parent);
+        if (crossingEye) { return parent; }
+        std::sort(points.begin(), points.begin()+count, [](Point a, Point b) {
+            return a.x < b.x || (a.x == b.x && a.y < b.y);
+        });
+        const auto turn = [](Point a, Point b, Point c) {
+            return (b.x-a.x)*(c.y-a.y) - (b.y-a.y)*(c.x-a.x);
+        };
+        std::array<Point, 24> polygon{}, scratch{};
+        size_t size = 0;
+        for (size_t i = 0; i < count; ++i) {
+            while (size >= 2 && turn(polygon[size-2], polygon[size-1], points[i]) <= 0) --size;
+            polygon[size++] = points[i];
+        }
+        const size_t lower = size;
+        for (size_t i = count-1; i-- > 0;) {
+            while (size > lower && turn(polygon[size-2], polygon[size-1], points[i]) <= 0) --size;
+            polygon[size++] = points[i];
+        }
+        if (size) --size;
+
+        const VisibilityRect window{parent.left-marginX, parent.right+marginX,
+            parent.top-marginY, parent.bottom+marginY};
+        for (unsigned plane = 0; plane < 4 && size; ++plane) {
+            const auto distance = [&](Point p) {
+                switch (plane) {
+                case 0: return p.x-window.left;
+                case 1: return window.right-p.x;
+                case 2: return p.y-window.top;
+                default: return window.bottom-p.y;
+                }
+            };
+            size_t written = 0;
+            Point a = polygon[size-1];
+            double da = distance(a);
+            for (size_t i = 0; i < size; ++i) {
+                const Point b = polygon[i];
+                const double db = distance(b);
+                if ((da < 0) != (db < 0)) {
+                    const double t = da/(da-db);
+                    scratch[written++] = {a.x+(b.x-a.x)*t, a.y+(b.y-a.y)*t};
+                }
+                if (db >= 0) scratch[written++] = b;
+                a = b; da = db;
+            }
+            polygon.swap(scratch); size = written;
+        }
+        if (!size) { return {1, 0, 1, 0}; }
+        VisibilityRect result{polygon[0].x, polygon[0].x, polygon[0].y, polygon[0].y};
+        for (size_t i = 1; i < size; ++i) {
+            result.left = std::min(result.left, polygon[i].x);
+            result.right = std::max(result.right, polygon[i].x);
+            result.top = std::min(result.top, polygon[i].y);
+            result.bottom = std::max(result.bottom, polygon[i].y);
+        }
+        return VisibilityRect{result.left-marginX, result.right+marginX,
+            result.top-marginY, result.bottom+marginY}.intersect(parent);
     }
 };
 
