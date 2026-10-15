@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(TWINERecompiled VERSION 0.1.92 LANGUAGES C CXX)
+project(TWINERecompiled VERSION 0.1.93 LANGUAGES C CXX)
 file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/twine-version.txt"
     CONTENT "${PROJECT_VERSION}\n")
 execute_process(
@@ -384,6 +384,7 @@ endif()
 function(twine_configure_executable target)
     add_executable(${target}
         src/main.cpp
+        src/host_window.cpp
         "${TWINE_AOT_RESOURCE}"
         $<TARGET_OBJECTS:twine_runtime_objects>)
     target_include_directories(${target} PRIVATE

@@ -32,6 +32,7 @@
 
 #include "pfs_runtime.hpp"
 #include "audio_host.hpp"
+#include "host_window.hpp"
 #include "audio_status_ui.hpp"
 #include "campaign_profile.hpp"
 #include "cheats.hpp"
@@ -364,25 +365,7 @@ ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
 ultramodern::renderer::WindowHandle create_window(
     ultramodern::gfx_callbacks_t::gfx_data_t
 ) {
-    int width = 1600;
-    int height = 900;
-    SDL_Rect usable_bounds{};
-    if (SDL_GetDisplayUsableBounds(0, &usable_bounds) == 0 &&
-            usable_bounds.w > 0 && usable_bounds.h > 0) {
-        width = std::min(width, usable_bounds.w);
-        height = std::min(height, usable_bounds.h);
-    }
-    window = SDL_CreateWindow(
-        "The World Is Probably Enough",
-        SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED,
-        width,
-        height,
-        SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI);
-    if (window == nullptr) {
-        throw std::runtime_error(
-            std::string("Failed to create window: ") + SDL_GetError());
-    }
+    window = twine::host_window::create();
 
 #ifdef _WIN32
     SDL_SysWMinfo window_info{};
