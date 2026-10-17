@@ -45,6 +45,7 @@ replace the executable. Keep that folder when updating or moving the game.
 - Audio recovery when devices reconnect.
 - Steam Deck rear-button shortcuts and suspend/resume recovery.
 - Portable saves and settings, plus a campaign-reset option that preserves your controls and display settings.
+- Bomb diffusal now takes a quarter of the time.
 
 ## QOL Toggles
 
@@ -59,6 +60,7 @@ replace the executable. Keep that folder when updating or moving the game.
 - **Double Watch Darts:** double dart grants, pickups and capacity on the next mission or restart.
 - **Regenerating Health:** Like Halo style if you want it.
 - **Impact Effects:** enhanced hit effects like lil blood puffs, enabled by default.
+- **Cold Reception Free Look** added, its off by default but gives 360 free look.
 
 ## Other optional settings:
 
