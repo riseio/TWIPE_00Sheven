@@ -14,7 +14,7 @@
 namespace twine::qol {
 namespace {
 
-std::array<std::atomic<uint8_t>, 15> setting_values{};
+std::array<std::atomic<uint8_t>, 16> setting_values{};
 std::atomic<uint64_t> lifecycle{1};
 std::atomic<uint64_t> inventory_lifecycle{1};
 
@@ -93,6 +93,10 @@ void add_setting(
 }
 
 void register_settings(recomp::config::Config& config) {
+    add_setting(
+        config, 15, cold_reception_free_look_key, "Cold Reception Free Look",
+        "Allow 360-degree horizontal aiming without recentering while snowboarding in Cold Reception. Works with mouse and controller. Off restores the original aiming limits.",
+        "off", "Off", "on", "On");
     add_setting(
         config, 14, keep_corpses_key, "Keep Corpses",
         "Stop ordinary defeated characters from fading away. Off restores fading. Mission cleanup and scripted removals are unchanged. Single-player only.",
@@ -194,6 +198,7 @@ Settings settings() {
         GyroAiming::Off,
         load_mode<ExtendedBombTimer>(13),
         load_mode<KeepCorpses>(14),
+        load_mode<ColdReceptionFreeLook>(15),
     };
 }
 

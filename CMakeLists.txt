@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(TWINERecompiled VERSION 0.1.93 LANGUAGES C CXX)
+project(TWINERecompiled VERSION 0.1.96 LANGUAGES C CXX)
 file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/twine-version.txt"
     CONTENT "${PROJECT_VERSION}\n")
 execute_process(
@@ -293,10 +293,12 @@ set(TWINE_RUNTIME_SOURCES
     src/display_list_lifetime.cpp
     src/controller_deadzone.cpp
     src/look_settings.cpp
+    src/snowboard_look.cpp
     src/impact_effects.cpp
     src/modern_grapple.cpp
     src/world_render_context.cpp
     src/native_queries.cpp
+    src/special_inventory.cpp
     src/native_render_tags.cpp src/native_visibility.cpp src/visibility_stack.cpp
     src/native_ui_render.cpp
     src/pause_background.cpp

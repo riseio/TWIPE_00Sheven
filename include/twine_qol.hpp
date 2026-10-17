@@ -27,6 +27,7 @@ inline constexpr char health_regeneration_key[] = "health_regeneration";
 inline constexpr char remember_weapon_modes_key[] = "remember_weapon_modes";
 inline constexpr char impact_effects_key[] = "impact_effects";
 inline constexpr char keep_corpses_key[] = "keep_corpses";
+inline constexpr char cold_reception_free_look_key[] = "cold_reception_free_look";
 inline constexpr char gyro_aiming_key[] = "gyro_aiming";
 inline constexpr char extended_bomb_timer_key[] = "extended_bomb_timer";
 inline constexpr char fall_damage_key[] = "fall_damage";
@@ -42,6 +43,7 @@ enum class HealthRegenerationMode : uint8_t { Off, On };
 enum class WeaponModeMemory : uint8_t { Off, On };
 enum class ImpactEffects : uint8_t { Original, Enhanced };
 enum class KeepCorpses : uint8_t { Off, On };
+enum class ColdReceptionFreeLook : uint8_t { Off, On };
 enum class GyroAiming : uint8_t { Off, On };
 enum class ExtendedBombTimer : uint8_t { Off, On };
 enum class FallDamageMode : uint8_t { Original, Off };
@@ -69,6 +71,7 @@ struct Settings {
     GyroAiming gyro = GyroAiming::Off;
     ExtendedBombTimer bomb_timer = ExtendedBombTimer::On;
     KeepCorpses corpses = KeepCorpses::Off;
+    ColdReceptionFreeLook cold_reception_free_look = ColdReceptionFreeLook::Off;
 };
 
 inline bool setting_key_equal(std::string_view left, std::string_view right) {

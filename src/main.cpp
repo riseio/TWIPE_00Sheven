@@ -1535,7 +1535,8 @@ extern "C" int twine_override_menu_scroll(uint8_t* rdram, recomp_context* ctx) {
         return 0;
     }
     ctx->r2 = 0;
-    if (!recompinput::game_input_disabled() && !recompinput::all_input_disabled()) {
+    const bool captured = recompinput::game_input_disabled() || recompinput::all_input_disabled();
+    if (!captured) {
         const auto input = action == 0x25U
             ? recompinput::GameInput::SCROLL_UP : recompinput::GameInput::SCROLL_DOWN;
         const bool any_player = TWINE_MEM_BU(0, 0x800BD690U) != 0;
@@ -1546,7 +1547,7 @@ extern "C" int twine_override_menu_scroll(uint8_t* rdram, recomp_context* ctx) {
             }
         }
     }
-    return 1;
+    return captured || ctx->r2 != 0;
 }
 
 extern "C" void twine_begin_ui_aspect(uint8_t* rdram, recomp_context* ctx) {

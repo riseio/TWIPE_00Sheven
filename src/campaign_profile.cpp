@@ -544,31 +544,17 @@ std::array<uint8_t, twine::campaign::payload_size> capture_payload(
     return payload;
 }
 
-uint32_t capture_profile(uint8_t* rdram, const char* reason) {
+uint32_t capture_profile(uint8_t* rdram, const char*) {
     std::lock_guard lock(twine::campaign::runtime_mutex);
     if (!twine::campaign::runtime_store) {
         return 0;
     }
-    const uint64_t before = twine::campaign::runtime_store->has_profile()
-        ? twine::campaign::runtime_store->profile().generation : 0;
     auto payload = capture_payload(rdram);
     twine::campaign::update_legacy_checksum(payload);
     for (size_t i = 0; i < payload.size(); ++i) {
         write_rdram_byte(rdram, i, payload[i]);
     }
     const bool committed = twine::campaign::runtime_store->commit(payload);
-    const uint64_t after = twine::campaign::runtime_store->has_profile()
-        ? twine::campaign::runtime_store->profile().generation : 0;
-    std::fprintf(
-        stderr,
-        "TWINE_PROFILE commit=%s result=%s generation_before=%llu "
-        "generation_after=%llu dirty=%u\n",
-        reason,
-        committed ? "durable" : "failed",
-        static_cast<unsigned long long>(before),
-        static_cast<unsigned long long>(after),
-        twine::campaign::runtime_store->dirty() ? 1U : 0U);
-
     return committed ? 1U : 0U;
 }
 
