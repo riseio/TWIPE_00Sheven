@@ -9,13 +9,17 @@ for my own playthrough, now shared because sharing is caring.
 ## Download and play
 
 Builds are available from [Releases](https://github.com/riseio/TWIPE_00Sheven/releases).
-This project does not contain any game assets or code derived from the **The World Is Not Enough (USA), revision 0** ROM. 
+This project does not contain any game assets or code derived from the **The World Is Not Enough (USA), revision 0** ROM.
 
 **The first launch compiles the game locally from your ROM. Later launches reuse the
 completed native code. No development tools or internet connection are needed to play.**
 
 Saves, settings, and generated content stay in the adjacent `data` folder when you
 replace the executable. Keep that folder when updating or moving the game.
+
+### Linux users with Arch-based Distributions
+
+There is an [AUR version](https://aur.archlinux.org/packages/ichgytw-bin) that pulls the latest AppImage release from this page.
 
 ## Enhancements
 
